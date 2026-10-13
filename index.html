@@ -358,6 +358,7 @@ input.field{font:inherit;border:1px solid var(--line);border-radius:8px;padding:
     <nav class="nav" id="nav" aria-label="Sections">
       <button data-act="nav" data-v="today">Today</button>
       <button data-act="nav" data-v="lesson">Lessons</button>
+      <button data-act="nav" data-v="guide">Study guide</button>
       <button data-act="nav" data-v="words">Words</button>
       <button data-act="nav" data-v="plan">My year</button>
       <button data-act="nav" data-v="journal">Error journal</button>
@@ -6431,7 +6432,7 @@ const idkBtn = (ctx, disabled) => '<button class="idk" data-act="idk" data-ctx="
 function render(){
   const navV = ({practice:"lesson",exam:"lesson",ret:"lesson",drill:"words",review:"today"})[U.view]||U.view; document.querySelectorAll("#nav button").forEach(b=>b.setAttribute("aria-current", b.dataset.v===navV?"page":"false"));
   const m = $("#main");
-  m.innerHTML = U.view==="today" ? vToday() : U.view==="lesson" ? vStairs() : U.view==="words" ? vWords() : U.view==="drill" ? vDrill() : U.view==="practice" ? vPractice() : U.view==="exam" ? vExam() : U.view==="ret" ? vRetention() : U.view==="journal" ? vJournal() : U.view==="review" ? vReview() : U.view==="plan" ? vPlan() : vSettings();
+  m.innerHTML = U.view==="today" ? vToday() : U.view==="lesson" ? vStairs() : U.view==="words" ? vWords() : U.view==="drill" ? vDrill() : U.view==="practice" ? vPractice() : U.view==="exam" ? vExam() : U.view==="ret" ? vRetention() : U.view==="journal" ? vJournal() : U.view==="guide" ? vGuide() : U.view==="review" ? vReview() : U.view==="plan" ? vPlan() : vSettings();
   renderStats(); renderTutorHead();
 }
 function renderStats(){
@@ -7340,6 +7341,9 @@ document.addEventListener("click", e=>{
     case "drill-unsure": { const q = drillCur(); if(q && q.vid){ vUnsure(q.vid); toast("Got it. That word goes back into review."); } drillNext(); break; }
     case "drill-quit": U.vd = null; U.view = "words"; render(); break;
     case "vfilter": U.vfilter = d.v; render(); break;
+    case "g-print": guidePrint(); break;
+    case "g-download": guideDownload(); break;
+    case "g-jump": { const el = document.getElementById(d.id); if(el) el.scrollIntoView({behavior:"smooth", block:"start"}); break; }
     case "step-go": if(goStep(+d.n)){ U.view = "lesson"; render(); window.scrollTo({top:0}); if(T.open) renderTutor(); } break;
     case "s1-home": U.view = "lesson"; U.s1lesson = null; render(); window.scrollTo({top:0}); if(T.open) renderTutor(); break;
     case "s1-lesson": U.view = "lesson"; U.s1lesson = d.id; U.s1m = 0; U.s1mReveal = null; render(); window.scrollTo({top:0}); if(T.open) renderTutor(); break;
@@ -9714,6 +9718,7 @@ vStairs = function(){
     const inner = '<span class="mono">Step '+s.n+'</span><strong>'+esc(s.name)+'</strong>'+(s.note?'<span class="muted" style="font-size:.82rem">'+esc(s.note)+'</span>':"")+'<span class="stair-status">'+(un?"":"🔒 ")+status+'</span>';
     const cls = "stair "+(done?"done":un?"active":"locked")+(cur?" current":"");
     return built && un ? '<button class="'+cls+'" style="--n:'+s.n+'" data-act="step-go" data-n="'+s.n+'" aria-pressed="'+cur+'">'+inner+'</button>' : '<div class="'+cls+'" style="--n:'+s.n+'">'+inner+'</div>'; }).join("")+'</section>';
+  if(C.n===1) h += '<section class="panel row" style="justify-content:space-between;gap:12px;flex-wrap:wrap"><div><span class="mono">Study guide</span><br><strong>How to Find the Conclusion</strong><br><span class="muted" style="font-size:.9rem">Who is talking, what do they believe, and what is the point? Read it slowly, print it, keep it next to you.</span></div><button class="btn primary" data-act="nav" data-v="guide">Open study guide</button></section>';
   if(C.n<frontierStep()) h += '<div class="note"><strong>You’re reviewing Step '+C.n+'.</strong> Your current step is Step '+frontierStep()+'. <button class="btn" data-act="step-go" data-n="'+frontierStep()+'" style="margin-left:6px">Go to Step '+frontierStep()+'</button></div>';
   h += '<section class="panel stack"><div class="row" style="justify-content:space-between"><h2>'+esc(C.name)+' mastery</h2><span class="verdict v-'+(st.mastered?"go":ss._overall>=70?"close":"build")+'">'+(st.mastered?"Mastered":"Overall "+ss._overall+"%")+'</span></div>'+
     '<div class="skilltable">'+S1_SKILLS.map(sk=>{ const v = ss[sk.id]; const pct = sk.id==="define" ? (v.solid?"✓":"—") : (v.n? Math.round(v.score*100)+"%":"—"); return '<div class="skrow'+(v.solid?" solid":"")+'"><span>'+esc(sk.label)+'</span><div class="skbar"><i style="width:'+(sk.id==="define"?(v.solid?100:0):Math.round(v.score*100))+'%"></i></div><span class="tnum">'+pct+'</span></div>'; }).join("")+'</div>'+
@@ -9879,6 +9884,304 @@ Object.assign(LESSON_BODY, {
 });
 
 goStep(frontierStep());
+
+/* =========================================================
+   STUDY GUIDES (printable): Conclusions
+   ========================================================= */
+const GT = {other:["gt-other","OTHER VOICE"], author:["gt-author","AUTHOR"], turn:["gt-turn","TURN"], ev:["gt-ev","EVIDENCE"], reason:["gt-ev","REASON"], con:["gt-con","AUTHOR’S CONCLUSION"], point:["gt-con","POINT"], bg:["gt-bg","SCENE-SETTING"]};
+const gtag = (k, label) => '<span class="gt '+GT[k][0]+'">['+esc(label||GT[k][1])+']</span>';
+const gline = (k, text, label) => '<div class="gline">'+gtag(k, label)+'<span>'+esc(text)+'</span></div>';
+const gbox = (title, body, cls) => '<div class="gbox'+(cls?" "+cls:"")+'">'+(title?'<h4>'+title+'</h4>':"")+body+'</div>';
+const gpart = (id, num, title, body) => '<section class="panel stack gpart" id="g-'+id+'"><span class="mono">'+esc(num)+'</span><h2>'+title+'</h2>'+body+'</section>';
+const gwalk = rows => '<dl class="gwalk">'+rows.map(([a,b])=>'<dt>'+esc(a)+'</dt><dd>'+esc(b)+'</dd>').join("")+'</dl>';
+const gtr = (from, to) => '<div class="translate"><div class="from">'+esc(from)+'</div><div class="arrow">→</div><div class="to">'+esc(to)+'</div></div>';
+
+const G_VOICE = [
+  ["Some people believe…","A few people think this is true.","🚨 This is THEIR opinion. The author hasn’t said they agree."],
+  ["Some people argue…","Some people are trying to convince others that…","🚨 Someone else is making a case. Wait for the author."],
+  ["Some people claim…","Some people say this is true.","🚨 A claim is just something someone says. Whose claim? Theirs."],
+  ["Some critics argue…","Some people who disagree are saying…","🚨 Critics’ opinion. The author may push back."],
+  ["Critics contend…","People who disagree insist that…","🚨 “Contend” = argue. Still THEIR view."],
+  ["Critics maintain…","People who disagree keep saying…","🚨 “Maintain” = keep claiming. Still THEIR view."],
+  ["Opponents claim…","People who are against the idea say…","🚨 The other side is talking."],
+  ["Supporters argue…","People who are for the idea say…","🚨 A group’s view. Is the author with them or against them?"],
+  ["Advocates maintain…","People pushing for it keep saying…","🚨 “Advocate” = supporter. Their view, not automatically the author’s."],
+  ["Researchers once believed…","Scientists used to think…","🚨 “Once” = in the past. The author is probably about to say that changed."],
+  ["Scientists traditionally believed…","Scientists have usually thought…","🚨 “Traditionally” is a setup. Expect a challenge."],
+  ["Many assume…","A lot of people think this is true without checking.","🚨 “Assume” hints they might be wrong. The author may challenge it."],
+  ["It is commonly believed…","Most people think…","🚨 Popular belief. The LSAT loves to knock these down."],
+  ["It is often said…","People say this a lot…","🚨 A saying, not the author’s point."],
+  ["Conventional wisdom holds…","The usual, accepted idea is…","🚨 “Conventional” = normal or standard. Expect the author to disagree."],
+  ["Some historians maintain…","Some history experts keep saying…","🚨 Experts are still OTHER people. Label them."],
+  ["According to critics…","The critics say…","🚨 “According to” = this is THEIR report, not the author’s."],
+  ["Proponents argue…","People in favor say…","🚨 “Proponent” = supporter. Their voice."],
+  ["Detractors claim…","People who criticize it say…","🚨 “Detractor” = critic. Their voice."]
+];
+const G_TURN = [
+  ["but","“Okay, I heard that… BUT here’s what really matters.”","The restaurant is expensive, but the food is excellent.","Focus on what comes after: the food is excellent."],
+  ["however","“What I’m about to say pushes against what came before.”","Some researchers thought the treatment didn’t work. However, newer studies found big benefits.","People used to think it didn’t work, but newer evidence says it does."],
+  ["yet","“Even though that first thing is true, here’s something pointing the other way.”","Many assume expensive products are better. Yet several cheap models beat the premium ones.","People think pricier = better, but some cheap ones are actually better."],
+  ["nevertheless","“Even so…” / “In spite of that…”","The hike is long. Nevertheless, it’s worth doing.","Yes, it’s long. Do it anyway."],
+  ["still","“Even after all that…”","The phone is old. Still, it works perfectly.","It’s old, but it works fine."],
+  ["although","“Yes, this is true… but…” (the less important part comes first)","Although the restaurant is expensive, it is worth visiting.","Yes, it’s pricey. But go anyway."],
+  ["even though","Same as although, with extra emphasis.","Even though it rained, the picnic was a success.","It rained, but the picnic still went well."],
+  ["despite","“Even with…”","Despite the delays, the project finished on budget.","There were delays, but it still stayed on budget."],
+  ["in contrast","“Here’s something different.”","City rents rose. In contrast, suburban rents fell.","Two things moving in opposite directions."],
+  ["on the other hand","“Looking at the other side…”","The job pays well. On the other hand, the hours are long.","Weighing two sides."],
+  ["by contrast","Same as in contrast.","Last year’s team was slow. By contrast, this year’s team is fast.","A comparison that points the other way."],
+  ["instead","“Not that. This.”","Don’t buy a new car. Instead, fix the old one.","The author rejects one option and picks another."],
+  ["rather","“Not that… this is more accurate.”","The problem isn’t money. Rather, it’s time.","The author corrects the first idea."]
+];
+const G_CON = [
+  ["therefore","For that reason.","“So my point is…”","🚨 Possible conclusion coming.","The roads are icy. Therefore, school should close.","The data are incomplete. Therefore, the study’s findings should not be relied on."],
+  ["thus","As a result.","“So…”","🚨 Possible point coming. Don’t let it feel fancy: thus = so.","The store is out of milk. Thus, we need to go somewhere else.","Demand has fallen for three consecutive years. Thus, expanding production would be unwise."],
+  ["hence","For this reason.","“That’s why…” / “So…”","🚨 Here comes a result or point. Sounds old-fashioned; means “so.”","The bridge is closed. Hence, the bus is taking the long way.","The evidence is unreliable. Hence, the conviction should be reconsidered."],
+  ["so","Because of that.","“Which means…”","🚨 Possible point, but check its job. “So heavy” is not a signal.","It’s getting dark, so we should head home.","The trial included only adults, so its results may not apply to children."],
+  ["consequently","As a result.","“Because of all that…”","🚨 Possible conclusion.","Our flight was canceled. Consequently, we’ll miss the wedding rehearsal.","Funding was cut by half. Consequently, the program cannot serve as many families."],
+  ["accordingly","In a way that fits what was just said.","“So, to match that…”","🚨 Often a recommendation is coming.","A storm is coming. Accordingly, the concert will move indoors.","Costs have risen sharply. Accordingly, the board should revise the budget."],
+  ["therefore we should","For that reason, we ought to.","“So here’s what we should do.”","🚨 A recommendation conclusion.","The printer jams daily. Therefore, we should replace it.","Enrollment has doubled; therefore, we should hire more instructors."],
+  ["this shows that","This proves that.","“Here’s what that proves.”","🚨 What follows is the claim the evidence is meant to prove.","Sales doubled after the ad ran. This shows that the ad worked.","Every sample contained the toxin. This shows that the contamination was widespread."],
+  ["this suggests that","This hints that.","“This makes it likely that…”","🚨 A softer conclusion. Keep its strength: suggests ≠ proves.","The dog is hiding under the bed. This suggests that he heard thunder.","The fossils were found together. This suggests that the species lived side by side."],
+  ["it follows that","This comes next, logically.","“If that’s true, then this is true too.”","🚨 A conclusion drawn from what came before.","All the tickets sold by noon. It follows that late arrivals couldn’t buy one.","No witness saw the defendant. It follows that the identification rests on other evidence."],
+  ["we can conclude that","We can decide that.","“So the answer is…”","🚨 The author announcing their point directly.","The jar is empty and Max has crumbs on his shirt. We can conclude that Max ate the cookies.","Every trial showed the same result. We can conclude that the effect is real."],
+  ["for this reason","Because of this.","“That’s why…”","🚨 What follows is supported by what came before.","The old car keeps breaking down. For this reason, we’re buying a new one.","The policy reduced accidents in three cities. For this reason, it should be adopted here."],
+  ["as a result","Because of that.","“So what happens is…”","🚨 Often a conclusion, sometimes just a description of what happened. Check its job.","The team practiced every morning. As a result, they’re ready.","The tax was repealed. As a result, consumer spending is likely to rise."],
+  ["then","In that case.","“If that’s true, then…”","🚨 In “if… then…” it can mark a conclusion or a rule. Read it carefully.","If the store closes at nine, then we need to leave by eight-thirty.","If the samples were contaminated, then the results cannot be trusted."]
+];
+const G_REASON = [
+  ["because","For the reason that.","“Here is why.”","🚨 Reason coming."],
+  ["since","Because. (Careful: also “from a time,” as in “since Monday.”)","“Seeing that…”","🚨 Reason coming, if it means because."],
+  ["given that","Taking into account that.","“Since we know that…”","🚨 Reason coming."],
+  ["for","Because (formal). (Careful: “a gift for Mom” is not a reason.)","“Because…”","🚨 Reason coming, if it means because."],
+  ["after all","Remember this important fact.","“Don’t forget…”","🚨 Reason coming, often one the author thinks is obvious."],
+  ["as","Because. (Careful: also “while” or “like.”)","“Because…”","🚨 Reason coming, if it means because."],
+  ["inasmuch as","To the extent that; because.","“Because…”","🚨 Reason coming. Fancy, but just means because."]
+];
+const G_FLASH = [].concat(
+  G_TURN.map(t=>[t[0].toUpperCase(), t[1], "The author’s direction may be shifting.", "What does the author believe AFTER this turn?"]),
+  G_CON.map(c=>[c[0].toUpperCase(), c[2], "Possible conclusion coming.", "Is the part before it a reason for the part after it?"]),
+  G_REASON.map(r=>[r[0].toUpperCase(), r[2], "Possible reason (support) coming.", "What point is this reason supporting?"]),
+  [["CRITICS ARGUE", "“People who disagree are saying…”", "Someone else is speaking.", "Does the author agree or push back?"],
+   ["MANY ASSUME", "“A lot of people think…”", "Someone else is speaking. A challenge may be coming.", "What does the AUTHOR think?"],
+   ["SOME BELIEVE", "“Some people think…”", "Someone else is speaking.", "Is this the author’s view or theirs?"],
+   ["OPPONENTS CLAIM", "“The other side says…”", "Someone else is speaking.", "What is the author’s own position?"],
+   ["RESEARCHERS ONCE BELIEVED", "“Scientists used to think…”", "Old view. The author probably says it changed.", "What does the newer evidence show?"]]
+);
+
+function guideConclusionHTML(){
+  const ex = (txt) => '<div class="stim">'+esc(txt)+'</div>';
+  let h = '';
+  h += '<section class="panel stack gcover"><span class="mono">Bridge LSAT · Study guide · Step 1</span><h1>How to Find the Conclusion</h1><p class="lead">Who is talking, what do they believe, and what is the point?</p><div class="note accent"><strong>This is a study guide, not a quiz.</strong> Read slowly. Nothing here is timed. The goal is recognition, understanding, translation and connection, not speed. Simple language first; the LSAT wording sits beside it.</div>'+
+    '<nav class="gtoc noprint"><span class="mono">Contents</span><ol>'+[["big","The one big idea"],["q1","Who is speaking?"],["voices","Voice signals"],["q2","What does that person believe?"],["q3","Author or someone else?"],["nametag","The name-tag method"],["turn","Direction-change words"],["con","Conclusion signal words"],["reason","Reason words"],["flip","Because vs. therefore, and the Flip test"],["roadsign","Signal words are road signs"],["normal","What would a normal person say?"],["check","The five-question check"],["color","Color-coding an argument"],["easy","10 easy walkthroughs"],["voicewalk","Other-voice walkthroughs"],["evidence","Evidence vs. conclusion"],["table","Sight-word table"],["flash","Flashcards"],["tricks","Memory tricks"],["cheat","One-page cheat sheet"]].map(([id,t])=>'<li><a href="#g-'+id+'" data-act="g-jump" data-id="g-'+id+'">'+esc(t)+'</a></li>').join("")+'</ol></nav></section>';
+
+  h += gpart("big","Part 1","Start with one big idea: people are talking",
+    '<p class="explain">When you read an LSAT argument, imagine that <strong>people are talking</strong>.</p><ul class="prose" style="padding-left:20px"><li>Someone may believe one thing.</li><li>Someone else may believe something different.</li><li>The author may tell you what <em>other people</em> believe before telling you what the <em>author</em> believes.</li></ul>'+
+    gbox("Your job is one question:", '<p class="gbig">“WHO BELIEVES WHAT?”</p><p>Before worrying about hard LSAT words, understand the conversation.</p>')+
+    gbox("The Four-Question Conclusion Check", '<ol class="prose" style="padding-left:20px"><li><strong>WHO is speaking?</strong></li><li><strong>WHAT does that person believe?</strong></li><li><strong>Is that the AUTHOR’S belief or SOMEONE ELSE’S?</strong></li><li><strong>What claim are the reasons trying to make me accept?</strong></li></ol><p class="muted">We’ll learn each question one at a time. Later we add a fifth safety question.</p>', "accent"));
+
+  h += gpart("q1","Question 1","Who is speaking?",
+    '<p class="explain">Sometimes an LSAT passage has <strong>more than one voice</strong>. A voice is just a person or group whose opinion shows up.</p>'+ex("Some parents believe school should begin later. However, the school board argues that changing the schedule would create transportation problems.")+
+    '<p>How many voices? <strong>Two.</strong></p>'+gwalk([["Voice 1","Some parents"],["Voice 2","The school board"]])+
+    '<p class="explain">So you <strong>cannot assume every sentence is what the author believes</strong>. Sometimes the author is simply saying: <em>“Here is what these people think.”</em></p>'+
+    gbox("Label the speakers in your head", gline("other","School should begin later.","SOME PARENTS")+gline("other","Changing the schedule would create transportation problems.","SCHOOL BOARD")+'<p style="margin-top:8px">Then ask: <strong>“Who said what?”</strong> Get comfortable separating voices before you do anything else.</p>'));
+
+  h += gpart("voices","Voice signals","Sight phrases: someone else may be speaking",
+    '<p class="explain">These phrases introduce <strong>other people’s beliefs</strong>. Learn them like sight words. When you see one, your brain should flash: <span class="alarm">🚨 SOMEONE ELSE MAY BE SPEAKING</span></p>'+
+    '<div class="tblwrap"><table class="cal gtable"><tr><th>Phrase</th><th>Plain English</th><th>Mental reaction</th></tr>'+G_VOICE.map(([p,e,r])=>'<tr><td><strong>'+esc(p)+'</strong></td><td>'+esc(e)+'</td><td>'+esc(r)+'</td></tr>').join("")+'</table></div>');
+
+  h += gpart("q2","Question 2","What does that person believe?",
+    '<p class="explain">Once you know <strong>who</strong> is speaking, find their <strong>claim</strong>.</p>'+gbox("Reminder", '<p><strong>CLAIM</strong> = something someone says is true. (It might be right or wrong.)</p>')+
+    '<p>Break sentences down like this:</p>'+
+    [["Critics argue that the new law will hurt small businesses.","Critics","The new law will hurt small businesses."],
+     ["My neighbor thinks the park needs more lights.","My neighbor","The park needs more lights."],
+     ["Many doctors recommend walking after meals.","Many doctors","Walking after meals is a good idea."],
+     ["The coach insists that practice should start earlier.","The coach","Practice should start earlier."],
+     ["Some economists predict that prices will fall next year.","Some economists","Prices will fall next year."],
+     ["According to the manager, the new schedule is working.","The manager","The new schedule is working."]].map(([s,w,b])=>ex(s)+gwalk([["WHO",w],["BELIEF",b]])).join(""));
+
+  h += gpart("q3","Question 3","Is this the author’s belief or someone else’s?",
+    '<div class="note warn"><strong>This is where the mistakes happen.</strong> A sentence can sound VERY important and still NOT be the author’s conclusion.</div>'+ex("Many people believe longer store hours increase profits.")+
+    '<p>That is a claim. But <strong>whose</strong> claim? <strong>Many people’s.</strong> Not necessarily the author’s.</p>'+
+    gbox("Ask yourself", '<p>“Did the author say <strong>THEY</strong> believe this?”</p><p>or</p><p>“Did the author tell me <strong>SOMEONE ELSE</strong> believes this?”</p>')+
+    '<p class="explain">Stop automatically choosing the first strong claim you see. First check who owns it.</p>');
+
+  h += gpart("nametag","Method","The name-tag method",
+    '<p class="explain">Imagine sticking a <strong>name tag</strong> on every opinion.</p>'+ex("Many people assume that longer store hours increase profits. Yet staffing costs increase while customer traffic remains low. Longer hours are not necessarily more profitable.")+
+    gbox("With name tags", gline("other","Longer hours increase profits.","MANY PEOPLE")+gline("author","Staffing costs increase.")+gline("author","Customer traffic remains low.")+gline("author","Longer hours are not necessarily more profitable."))+
+    '<p>Now ask: <strong>whose conclusion are we looking for?</strong> Almost always: <strong>THE AUTHOR’S.</strong> With name tags on, the “many people” sentence is obviously not it.</p>');
+
+  h += gpart("turn","Part 2","Direction-change words (turn words)",
+    '<p class="explain">These words often mean: <strong>“The argument is about to change direction.”</strong> Treat them as sight words. <span class="alarm">🚨 TURNING POINT</span></p>'+
+    gbox("BUT", '<p><strong>Plain English:</strong> “Okay, I heard that… BUT here is what really matters.”</p><p>Information <em>after</em> “but” usually gets more emphasis.</p>'+ex("The restaurant is expensive, BUT the food is excellent.")+'<p>What does the speaker want you to focus on? <strong>The food is excellent.</strong></p><p class="muted">This isn’t a mechanical rule. BUT is a clue that says: “Pay attention. The speaker is changing direction.”</p>')+
+    gbox("HOWEVER", '<p><strong>Plain English:</strong> “What I’m about to say pushes against what came before.”</p>'+ex("Some researchers thought the treatment was ineffective. HOWEVER, newer studies found substantial benefits.")+gtr("Some researchers thought the treatment was ineffective. However, newer studies found substantial benefits.","People used to think it didn’t work. But newer evidence says it does.")+'<p><strong>HOWEVER = 🚨 TURNING POINT.</strong></p>')+
+    gbox("YET", '<p><strong>Plain English:</strong> “Even though that first thing is true, here’s something that points another way.”</p>'+ex("Many assume expensive products are higher quality. YET several inexpensive models outperform premium models.")+'<p><strong>YET = 🚨 CHANGE OF DIRECTION.</strong></p>')+
+    gbox("ALTHOUGH / EVEN THOUGH: “Yes, but…” language", ex("ALTHOUGH the restaurant is expensive, it is worth visiting.")+gtr("Although the restaurant is expensive, it is worth visiting.","Yes, it’s expensive. BUT I still think you should go.")+'<p class="explain">The “although” part is something the author <strong>admits</strong> before making the more important point.</p><p class="gbig">ALTHOUGH X, Y<br>= “Yes, X is true… BUT Y is the point I care about.”</p>')+
+    '<h3>All the turn words</h3><div class="tblwrap"><table class="cal gtable"><tr><th>Word</th><th>Plain English</th><th>Example</th><th>What it’s really saying</th></tr>'+G_TURN.map(([w,p,e,m])=>'<tr><td><strong>'+esc(w.toUpperCase())+'</strong></td><td>'+esc(p)+'</td><td>'+esc(e)+'</td><td>'+esc(m)+'</td></tr>').join("")+'</table></div>');
+
+  h += gpart("con","Part 3","Conclusion signal words",
+    '<p class="explain">These are the conclusion sight words. When you see one: <span class="alarm">🚨 POSSIBLE CONCLUSION COMING</span></p>'+
+    gbox("THEREFORE in a picture", '<p>“The roads are covered in ice. THEREFORE, school should close.”</p>'+gwalk([["REASON","Roads are icy."],["POINT","School should close."]])+'<div class="chain"><div class="chainbox">PREMISE / SUPPORT</div><div class="darrow">↓</div><div class="chainbox"><strong>THEREFORE</strong></div><div class="darrow">↓</div><div class="chainbox">CONCLUSION</div></div>')+
+    gbox("HENCE sounds fancy but isn’t scary", '<p>HENCE basically means “therefore” or “so.”</p>'+gtr("The evidence is unreliable. Hence, the conviction should be reconsidered.","The evidence isn’t trustworthy, SO maybe the conviction needs another look.")+'<p><strong>HENCE = 🚨 “Here comes a result or point.”</strong></p>')+
+    gbox("THUS = therefore = so", gtr("Demand has fallen for three consecutive years. Thus, expanding production would be unwise.","People are buying less. SO making even more probably isn’t smart."))+
+    gbox("SO can be tricky", '<p><strong>Conclusion “so”:</strong> “The weather is getting worse, SO we should leave.”</p><p><strong>Ordinary “so”:</strong> “The box was SO heavy that I couldn’t lift it.” Here SO does <em>not</em> mean therefore.</p><p class="gbig">Don’t memorize a word blindly. Ask: “What JOB is this word doing in THIS sentence?”</p>', "warn")+
+    '<h3>Every conclusion word</h3>'+G_CON.map(([w,n,p,r,e,l])=>'<div class="gword"><h4>'+esc(w.toUpperCase())+'</h4>'+gwalk([["1 · Normal definition",n],["2 · Plain English",p],["3 · What my brain thinks",r],["4 · Easy example",e],["5 · LSAT-style example",l]])+'</div>').join(""));
+
+  h += gpart("reason","Part 4","Reason words: the other side",
+    '<p class="explain">Some words usually introduce <strong>reasons</strong>, not conclusions.</p>'+
+    '<div class="tblwrap"><table class="cal gtable"><tr><th>Word</th><th>Normal meaning</th><th>Plain English</th><th>Mental reaction</th></tr>'+G_REASON.map(([w,n,p,r])=>'<tr><td><strong>'+esc(w.toUpperCase())+'</strong></td><td>'+esc(n)+'</td><td>'+esc(p)+'</td><td>'+esc(r)+'</td></tr>').join("")+'</table></div>'+
+    gbox("BECAUSE, up close", '<p><strong>Plain English:</strong> “Here is why.” <span class="alarm">🚨 REASON COMING</span></p>'+ex("We should leave now BECAUSE traffic is getting worse.")+gline("point","We should leave now.")+'<div class="gline"><span class="gt gt-turn">[BECAUSE]</span><span></span></div>'+gline("reason","Traffic is getting worse.")+'<p class="gbig">POINT because REASON.</p>')+
+    gbox("SINCE and GIVEN THAT", ex("Since the museum is closed on Mondays, we should go on Tuesday.")+gwalk([["REASON","The museum is closed on Mondays."],["POINT","We should go on Tuesday."]])+ex("Given that the budget was cut, the team cannot hire anyone this year.")+gwalk([["REASON","The budget was cut."],["POINT","The team cannot hire anyone this year."]])+'<p class="muted">Careful: “since Monday” is about time, not a reason.</p>'));
+
+  h += gpart("flip","Compare","BECAUSE vs. THEREFORE, and the Flip test",
+    '<p class="explain"><strong>BECAUSE</strong> points toward the <strong>reason</strong>. <strong>THEREFORE</strong> points toward the <strong>point</strong>.</p>'+
+    gbox("Example 1", ex("We should leave BECAUSE traffic is getting bad.")+'<p class="gbig">POINT ← BECAUSE ← REASON</p>')+
+    gbox("Example 2", ex("Traffic is getting bad. THEREFORE, we should leave.")+'<p class="gbig">REASON → THEREFORE → POINT</p>')+
+    '<div class="note accent"><strong>The meaning is the same. Only the ORDER changed.</strong> This is extremely important.</div>'+
+    gbox("The Flip test", '<p>If you’re confused about which statement is the conclusion, try: <strong>“A because B.”</strong> Then flip it: <strong>“B because A.”</strong> Which one makes sense?</p>'+gwalk([["A","We should leave."],["B","Traffic is terrible."]])+'<p>✓ “We should leave BECAUSE traffic is terrible.” Makes sense.</p><p>✗ “Traffic is terrible BECAUSE we should leave.” Nonsense.</p><p>So: <strong>traffic is terrible = reason</strong>. <strong>We should leave = conclusion.</strong></p><p>Same relationship with therefore: “Traffic is terrible. THEREFORE, we should leave.”</p>', "accent")+
+    '<h3>More flips</h3>'+[["The printer is broken.","We need to call IT."],["The soup is too salty.","Add more water."],["Ticket sales dropped 40%.","The ad campaign failed."],["The witness was across the street at night.","Her identification is unreliable."],["The bridge has visible cracks.","The bridge should be inspected."]].map(([r,c])=>gbox("", '<p>✓ “'+esc(c.replace(/\.$/,""))+' BECAUSE '+esc(r.charAt(0).toLowerCase()+r.slice(1).replace(/\.$/,""))+'.”</p><p>✗ “'+esc(r.replace(/\.$/,""))+' BECAUSE '+esc(c.charAt(0).toLowerCase()+c.slice(1).replace(/\.$/,""))+'.”</p><p>Conclusion: <strong>'+esc(c)+'</strong> Reason: '+esc(r)+'</p>')).join(""));
+
+  h += gpart("roadsign","Part 5","Don’t let signal words control you",
+    gbox("", '<p class="gbig">SIGNAL WORDS ARE ROAD SIGNS.<br>They are NOT the destination.</p>')+
+    '<p class="explain">A road sign that says <strong>“Memphis →”</strong> points you toward Memphis. The sign itself is not Memphis.</p><p class="explain">Likewise, <strong>“therefore”</strong> points toward a conclusion. You still have to read the sentence and understand what’s happening. Use signal words to know where to look, then check the meaning.</p>');
+
+  h += gpart("normal","Part 6","Words can trick you: what would a normal person say?",
+    '<p class="explain">The LSAT makes very simple reasoning look complicated. Your move: <strong>strip away the fancy language.</strong></p>'+
+    gbox("Word by word", ex("Given the persistent deterioration of the structure, its replacement is therefore warranted.")+gwalk([["persistent deterioration","it keeps getting worse"],["structure","the building / the thing"],["replacement is warranted","we should replace it"]])+'<p class="gbig">“It keeps getting worse, so we should replace it.”</p>')+
+    '<h3>More translations</h3>'+[
+      ["The proposed expenditure cannot be justified in light of the projected decline in revenue.","We’ll be making less money, so we shouldn’t spend this."],
+      ["Consequently, the committee’s decision to postpone the vote was unwarranted.","So the committee shouldn’t have delayed the vote."],
+      ["The available evidence fails to substantiate the claim that the drug is effective.","There isn’t enough proof that the drug works."],
+      ["It would be imprudent to expand the program prior to evaluating its costs.","Don’t grow the program until you know what it costs."],
+      ["The decline in membership cannot be attributed solely to the fee increase.","The price increase isn’t the only reason people left."],
+      ["Hence, the hypothesis must be regarded as unsubstantiated.","So the idea hasn’t been proven yet."]
+    ].map(([a,b])=>gtr(a,b)).join(""));
+
+  h += gpart("check","Part 7","Your permanent method: the five-question check",
+    '<ol class="gsteps"><li><strong>WHO is speaking?</strong><br>The author? Critics? Supporters? Researchers? Many people? Opponents? Experts?</li><li><strong>WHAT does that person believe?</strong><br>Put the claim into simple English.</li><li><strong>Is this the AUTHOR or someone else?</strong><br>Label the voice. Don’t guess.</li><li><strong>What claim are the reasons trying to make me accept?</strong><br>Ask: “Why did the author give me these reasons?” The statement receiving the support is likely the conclusion.</li><li><strong>Did the author CHANGE DIRECTION?</strong><br>Look for but, however, yet, nevertheless, although, still, instead, rather. If yes, slow down: the author’s real position may come AFTER the turn.</li></ol>');
+
+  h += gpart("color","Part 8","Color-code the argument (with labels)",
+    '<p class="explain">Every sentence gets a label. The colors help, but the <strong>labels</strong> carry the meaning, so this works in black-and-white print too.</p>'+
+    gbox("", gline("other","Many people believe longer hours increase profits.","OTHER PEOPLE’S VIEW")+'<div class="gline"><span class="gt gt-turn">[TURN]</span><span><strong>BUT</strong></span></div>'+gline("ev","Staffing costs rise.")+gline("ev","Customer traffic remains low.")+gline("con","Longer hours are not necessarily more profitable."))+
+    '<p class="muted">Now the reasoning is visible: other view → turn → evidence → the author’s conclusion.</p>');
+
+  const EASY = [
+    ["Mom says we should take an umbrella because it is raining.", [["WHO?","Mom"],["WHAT DOES SHE BELIEVE?","We should take an umbrella."],["WHY?","It is raining."],["REASON","It is raining."],["CONCLUSION","We should take an umbrella."]]],
+    ["The dog hasn’t eaten all day, so we should call the vet.", [["WHO?","The speaker (the author)"],["WHAT DO THEY BELIEVE?","We should call the vet."],["WHY?","The dog hasn’t eaten all day."],["SIGNAL","“so” points to the point"],["CONCLUSION","We should call the vet."]]],
+    ["You should try the new taco place. Their salsa is homemade and everything is under five dollars.", [["WHO?","The speaker"],["WHAT DO THEY BELIEVE?","You should try the taco place."],["WHY?","Homemade salsa; cheap prices."],["NOTE","The point comes FIRST here."],["CONCLUSION","You should try the new taco place."]]],
+    ["My sister thinks I should sell my car because I barely drive it.", [["WHO?","My sister"],["WHAT DOES SHE BELIEVE?","I should sell my car."],["WHY?","I barely drive it."],["WHOSE VIEW?","The sister’s. The speaker is reporting it."],["CONCLUSION (sister’s argument)","I should sell my car."]]],
+    ["The printer is out of ink. Therefore, we can’t print the flyers today.", [["WHO?","The speaker"],["SIGNAL","therefore"],["REASON","The printer is out of ink."],["CONCLUSION","We can’t print the flyers today."]]],
+    ["The baby is rubbing her eyes and yawning. She probably needs a nap.", [["WHO?","The speaker"],["SIGNAL","None. “Probably” is a judgment word."],["REASON","Rubbing eyes, yawning."],["CONCLUSION","She probably needs a nap."]]],
+    ["Since the store closes at nine, we need to leave by eight-thirty.", [["WHO?","The speaker"],["SIGNAL","“since” = because → reason"],["REASON","The store closes at nine."],["CONCLUSION","We need to leave by eight-thirty."]]],
+    ["Although the hotel is far from downtown, it’s the best choice. It’s quiet, and it costs half as much.", [["WHO?","The speaker"],["YES, BUT…","Yes, it’s far. But…"],["REASONS","It’s quiet; it costs half as much."],["CONCLUSION","The hotel is the best choice."]]],
+    ["Some people say cats can’t be trained. But my cat sits on command and comes when called. Cats can be trained.", [["VOICE 1","Some people: cats can’t be trained."],["TURN","But"],["AUTHOR’S REASON","My cat sits and comes when called."],["CONCLUSION","Cats can be trained."]]],
+    ["Crime fell 30 percent after the program began. Therefore, the city should keep funding the program.", [["WHO?","The author"],["SIGNAL","therefore"],["SUPPORT","Crime fell 30 percent. (Impressive, but it’s the reason.)"],["CONCLUSION","The city should keep funding the program."]]],
+    ["Biologist: Reefs that lose half their algae rarely recover. The Point Hara reef has lost seventy percent of its algae. Thus, it is unlikely to recover.", [["WHO?","The biologist (the author of this argument)"],["SIGNAL","thus"],["REASONS","Reefs that lose half rarely recover; Point Hara lost 70%."],["IN NORMAL WORDS","This reef lost too much algae, so it probably won’t come back."],["CONCLUSION","The Point Hara reef is unlikely to recover."]]],
+    ["It is often said that breakfast is the most important meal. Yet in a recent study, people who skipped breakfast performed just as well on memory tests. The saying is overstated.", [["VOICE 1","It is often said (popular belief): breakfast is most important."],["TURN","Yet"],["AUTHOR’S EVIDENCE","Skippers did just as well on memory tests."],["IN NORMAL WORDS","People say breakfast matters most, but the study says not so much."],["CONCLUSION","The saying is overstated."]]]
+  ];
+  h += gpart("easy","Part 9","Walkthroughs, from very easy to harder",
+    '<p class="explain">Read each one. Nothing to answer. Notice the pattern: <strong>who → what they believe → why → the point.</strong></p>'+EASY.map(([t,rows],i)=>'<div class="gword"><span class="mono">Walkthrough '+(i+1)+'</span>'+ex(t)+gwalk(rows)+'</div>').join(""));
+
+  const VOICEW = [
+    ["Some people think school uniforms are unnecessary. However, uniforms reduce clothing competition among students. Schools should continue requiring them.", "Some people", "Uniforms are unnecessary.", "However", "Uniforms reduce clothing competition.", "Schools should continue requiring uniforms.", "The first sentence is what SOME PEOPLE think. The author mentions it in order to disagree with it. The author’s reasons support the opposite idea."],
+    ["Critics argue that the new bike lanes will make traffic worse. But traffic times on Main Street have actually dropped since the lanes opened. The bike lanes are working.", "Critics", "Bike lanes will make traffic worse.", "But", "Traffic times on Main Street dropped.", "The bike lanes are working.", "The critics’ prediction sounds like a strong claim, but it belongs to the critics. The evidence after “but” supports the author’s opposite point."],
+    ["Many assume that reading on screens hurts understanding. Yet students in a recent experiment understood articles equally well on screens and on paper. The assumption is mistaken.", "Many people", "Screens hurt understanding.", "Yet", "Students understood equally well on both.", "The assumption is mistaken.", "“Many assume” is a voice signal. The author’s conclusion is a judgment about that assumption: it’s wrong."],
+    ["Researchers once believed that adult brains could not grow new cells. Newer studies, however, have found new neurons forming in adults. The old view should be abandoned.", "Researchers (in the past)", "Adult brains can’t grow new cells.", "however", "New neurons form in adults.", "The old view should be abandoned.", "“Once believed” tells you this is an OLD view. The author uses new evidence against it."],
+    ["Supporters of the stadium claim it will bring jobs to the city. Although some construction jobs will appear, they will last only two years. The stadium is not a good long-term jobs plan.", "Supporters", "The stadium will bring jobs.", "Although", "The jobs last only two years.", "The stadium is not a good long-term jobs plan.", "The supporters’ claim is not the author’s. “Although” admits a small point (some jobs) before the author’s real point."]
+  ];
+  h += gpart("voicewalk","Part 10","Other-voice walkthroughs",
+    VOICEW.map(([t,v,b,turn,r,c,why],i)=>'<div class="gword"><span class="mono">Example '+(i+1)+'</span>'+ex(t)+gline("other",b,"VOICE 1: "+v.toUpperCase())+'<div class="gline"><span class="gt gt-turn">[TURN WORD]</span><span><strong>'+esc(turn)+'</strong></span></div>'+gline("ev",r,"AUTHOR’S REASON")+gline("con",c)+'<p class="explain"><strong>Why the first sentence is NOT the conclusion:</strong> '+esc(why)+'</p></div>').join(""));
+
+  h += gpart("evidence","Part 11","Evidence vs. conclusion",
+    '<p class="explain">Strong evidence can tempt you. A statement can sound impressive and still only be <strong>support</strong>.</p>'+ex("Crime fell 30 percent after the program began. Therefore, the city should continue funding the program.")+
+    '<p>“Crime fell 30 percent” sounds important. But ask: <strong>WHY did the author tell me that?</strong> To convince me that the city should keep funding the program.</p>'+gline("ev","Crime fell 30 percent.","SUPPORT")+gline("con","The city should continue funding the program.","CONCLUSION")+
+    gbox("Remember", '<ul class="gnot"><li>IMPORTANT ≠ CONCLUSION</li><li>DETAILED ≠ CONCLUSION</li><li>STATISTIC ≠ CONCLUSION</li><li>LONGEST SENTENCE ≠ CONCLUSION</li><li>LAST SENTENCE ≠ ALWAYS CONCLUSION</li><li>FIRST SENTENCE ≠ ALWAYS BACKGROUND</li></ul><p class="gbig">ROLE decides the conclusion.</p>', "warn"));
+
+  const TABLE = [["OTHER VOICE","critics argue · some believe · many assume · opponents claim · supporters contend · researchers once believed","“Someone else thinks…”"],["TURN WORDS","but · however · yet · although · nevertheless · still · instead · rather","“Watch out: direction may change.”"],["CONCLUSION WORDS","therefore · thus · hence · consequently · so · it follows that · we can conclude · for this reason","“Possible point coming.”"],["REASON WORDS","because · since · given that · after all","“Here is why.”"]];
+  h += gpart("table","Part 12","Sight-word table",
+    '<div class="tblwrap"><table class="cal gtable"><tr><th>Category</th><th>Words</th><th>Brain translation</th></tr>'+TABLE.map(([c,w,b])=>'<tr><td><strong>'+c+'</strong></td><td>'+esc(w)+'</td><td>'+esc(b)+'</td></tr>').join("")+'</table></div>');
+
+  h += gpart("flash","Part 13","Flashcards",
+    '<p class="muted noprint">Tap a card to flip it. When printed, both sides show, so you can cut them out and fold.</p><div class="gflash">'+G_FLASH.map(([f,p,r,q])=>'<details class="gcard"><summary><span>'+esc(f)+'</span></summary><div class="gback"><p><strong>Plain English:</strong> '+esc(p)+'</p><p><strong>LSAT reaction:</strong> '+esc(r)+'</p><p><strong>Ask:</strong> '+esc(q)+'</p></div></details>').join("")+'</div>');
+
+  h += gpart("tricks","Part 14","Mini memory tricks",
+    '<div class="gtricks">'+[["BECAUSE","WHY"],["THEREFORE","POINT"],["BUT","TURN"],["HOWEVER","TURN"],["CRITICS SAY","THEIR VOICE"],["AUTHOR SAYS","MY TARGET"],["REASONS","→ POINT"]].map(([a,b])=>'<div><strong>'+a+'</strong> = '+b+'</div>').join("")+'</div>'+
+    '<p>Draw it:</p><div class="grid2"><div class="chain"><div class="chainbox">REASON</div><div class="darrow">↓</div><div class="chainbox">REASON</div><div class="darrow">↓</div><div class="chainbox"><strong>POINT</strong></div></div><div class="chain"><div class="chainbox">SUPPORT</div><div class="darrow">→</div><div class="chainbox"><strong>CONCLUSION</strong></div></div></div>');
+
+  h += '<section class="panel stack gpart gcheat" id="g-cheat"><span class="mono">Part 15 · One-page cheat sheet</span><h2>FIND THE CONCLUSION: QUICK CHECK</h2>'+
+    '<ol class="gsteps big"><li>WHO is talking?</li><li>WHAT do they believe?</li><li>WHOSE opinion is it?</li><li>Did I see a TURN word?</li><li>What are the REASONS?</li><li>What claim do those reasons SUPPORT?</li></ol>'+
+    '<div class="gcheatgrid"><div>'+gtag("other")+'<br>some say · critics argue · many believe</div><div>'+gtag("turn")+'<br>but · however · yet · although</div><div>'+gtag("reason")+'<br>because · since · given that</div><div>'+gtag("con","CONCLUSION")+'<br>therefore · thus · hence · so · consequently</div></div>'+
+    '<p class="ghuge">DO NOT CHOOSE A SENTENCE JUST BECAUSE IT SOUNDS IMPORTANT.</p><p class="ghuge">ASK: “WHAT ARE THEY TRYING TO MAKE ME BELIEVE?”</p></section>';
+
+  h += '<section class="panel stack noprint"><h3>When you’re ready</h3><p>You should finish this feeling: <em>“Ohhh. I understand what these people are actually saying.”</em> Practice comes after, in Step 1.</p><div class="row"><button class="btn primary" data-act="nav" data-v="lesson">Back to Step 1</button><button class="btn" data-act="g-print">Print this guide</button></div></section>';
+  return h;
+}
+
+const GUIDE_CSS = `
+.gt{display:inline-block;font-family:var(--f-mono);font-size:.72rem;letter-spacing:.06em;font-weight:600;border-radius:4px;padding:2px 6px;border:1px solid currentColor;white-space:nowrap;margin-right:8px;vertical-align:1px}
+.gt-other{background:var(--hl-opp);color:var(--ink)} .gt-author{background:var(--sunk);color:var(--ink)} .gt-turn{background:var(--warn-soft);color:var(--warn)} .gt-ev{background:var(--hl-ev);color:var(--ink)} .gt-con{background:var(--hl-con);color:var(--ink)} .gt-bg{background:var(--hl-bg);color:var(--ink)}
+.gline{display:flex;gap:4px;align-items:baseline;padding:6px 0;border-bottom:1px dashed var(--line);flex-wrap:wrap}
+.gline:last-child{border-bottom:0}
+.gbox{border:1px solid var(--line);border-radius:10px;padding:14px 16px;background:var(--surface)} .gbox h4{margin:0 0 8px;font-family:var(--f-display);font-size:1.1rem}
+.gbox.accent{background:var(--accent-soft)} .gbox.warn{background:var(--warn-soft)}
+.gbig{font-family:var(--f-display);font-size:1.25rem;line-height:1.35;margin:8px 0}
+.gwalk{display:grid;grid-template-columns:minmax(110px,max-content) 1fr;gap:4px 14px;margin:8px 0}
+.gwalk dt{font-family:var(--f-mono);font-size:.76rem;letter-spacing:.05em;color:var(--muted);padding-top:3px}
+.gwalk dd{margin:0}
+.gword{border-left:3px solid var(--accent);padding:4px 0 4px 14px;display:flex;flex-direction:column;gap:6px}
+.gtable td,.gtable th{text-align:left;vertical-align:top}
+.gtoc ol{columns:2;column-gap:24px;padding-left:20px;margin:6px 0 0} .gtoc a{color:var(--accent)}
+.gsteps{padding-left:24px;display:flex;flex-direction:column;gap:10px} .gsteps.big li{font-family:var(--f-display);font-size:1.3rem}
+.gnot{list-style:none;padding:0;margin:0;display:grid;gap:4px;font-family:var(--f-mono);font-size:.9rem}
+.gflash{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px}
+.gcard{border:1px solid var(--line);border-radius:10px;background:var(--surface)} .gcard summary{list-style:none;cursor:pointer;padding:22px 12px;text-align:center;font-family:var(--f-display);font-size:1.2rem;font-weight:600}
+.gcard summary::-webkit-details-marker{display:none} .gcard[open] summary{border-bottom:1px dashed var(--line);padding:10px}
+.gback{padding:10px 14px;font-size:.92rem} .gback p{margin:4px 0}
+.gtricks{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:8px} .gtricks div{border:1px solid var(--line);border-radius:8px;padding:10px;font-family:var(--f-display);font-size:1.1rem}
+.gcheatgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px} .gcheatgrid div{border:1px solid var(--line);border-radius:8px;padding:10px;line-height:1.6}
+.ghuge{font-family:var(--f-display);font-size:1.5rem;font-weight:600;line-height:1.3;margin:10px 0;text-align:center}
+.gtoolbar{position:sticky;top:0;z-index:3}
+@media (max-width:600px){.gtoc ol{columns:1}.gcheatgrid{grid-template-columns:1fr}.gwalk{grid-template-columns:1fr}}
+@media print{
+  :root{--paper:#fff;--surface:#fff;--sunk:#f2f2f2;--ink:#111;--muted:#444;--line:#999;--accent:#1F6B57;--accent-soft:#eef5f2;--warn:#7a4f00;--warn-soft:#fbf3e2;--hl-ev:#e3eeff;--hl-con:#fff3cc;--hl-opp:#fbe5e1;--hl-bg:#efedf4;color-scheme:light}
+  body{background:#fff!important;color:#111}
+  header,.topbar,.tutor,#tutor,.tutor-toggle,.noprint,#popwrap,.toast,.scrim{display:none!important}
+  .shell{display:block!important;padding:0!important;max-width:none!important}
+  main,#main{max-width:none!important;padding:0!important;margin:0!important}
+  .panel{box-shadow:none!important;border:0!important;padding:0 0 12px!important;break-inside:auto}
+  .gpart{padding-top:14px!important;border-top:1px solid #999!important} .gcover{break-after:page} .gcheat{break-before:page;border-top:0!important} .gpart h2{break-after:avoid}
+  .gword,.gbox,.gcard,.gline,tr,.translate{break-inside:avoid}
+  .gcard summary{padding:10px} .gcard .gback{display:block!important}
+  details.gcard > :not(summary){display:block!important}
+  .gflash{grid-template-columns:1fr 1fr}
+  .gt{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  a{color:inherit;text-decoration:none}
+}`;
+(function(){ const st = document.createElement("style"); st.textContent = GUIDE_CSS; document.head.appendChild(st); })();
+
+function vGuide(){
+  return '<div class="stack guide"><section class="panel row noprint gtoolbar" style="justify-content:space-between;gap:10px;flex-wrap:wrap"><div><span class="mono">Study guides</span><br><strong>Step 1 · Conclusions</strong></div><div class="row" style="gap:8px;flex-wrap:wrap"><button class="btn primary" data-act="g-print">Print</button><button class="btn" data-act="g-download">Download printable copy</button></div><p class="muted" id="g-note" style="flex-basis:100%;margin:0;font-size:.85rem"></p></section>'+guideConclusionHTML()+'</div>';
+}
+function guideStandalone(){
+  const css = [...document.querySelectorAll("style")].map(s=>s.textContent).join("\n");
+  return '<!doctype html><html lang="en" data-theme="light"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Study guide: How to Find the Conclusion</title><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600&family=IBM+Plex+Mono:wght@500&display=swap"><style>'+css+'\nbody{padding:16px;max-width:860px;margin:0 auto}.gcard .gback{display:block}</style></head><body><main>'+
+    guideConclusionHTML().replace(/<details class="gcard">/g,'<details class="gcard" open>')+'</main><script>window.addEventListener("load",()=>setTimeout(()=>window.print(),400));<\/script></body></html>';
+}
+async function guideDownload(){
+  const note = $("#g-note"); const say = t => { if(note) note.textContent = t; };
+  const html = guideStandalone();
+  try{
+    const dl = (window.claude && claude.use) ? await claude.use("downloads") : null;
+    if(dl){ await dl.save({filename:"conclusion-study-guide.html", data:html}); say("Saved. Open it from your Downloads folder; it opens the print window by itself."); return; }
+  }catch(e){ if(e && e.code==="declined"){ say("Download cancelled."); return; } }
+  try{ const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([html],{type:"text/html"})); a.download = "conclusion-study-guide.html"; document.body.appendChild(a); a.click(); a.remove(); say("Downloaded. Open the file and it prints."); }
+  catch(e){ say("Download isn’t available here. Use Print, or open the guide on your website."); }
+}
+window.addEventListener("beforeprint", ()=>document.querySelectorAll("details.gcard").forEach(d=>d.open = true));
+function guidePrint(){
+  document.querySelectorAll("details.gcard").forEach(d=>d.open = true);
+  try{ window.print(); } catch(e){}
+  const note = $("#g-note"); if(note) note.textContent = "If no print window opened, this window blocks printing. Use “Download printable copy”, or print from your website.";
+}
 
 /* plan goal defaults (target 170, stretch 175, minimum 165) */
 if(S.plan){ if(S.plan.start && !S.plan.target) S.plan.target = 170; if(!S.plan.stretch) S.plan.stretch = 175; if(!S.plan.minimum) S.plan.minimum = 165; }
