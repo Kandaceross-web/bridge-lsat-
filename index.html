@@ -7340,7 +7340,7 @@ document.addEventListener("click", e=>{
     case "s1-home": U.view = "lesson"; U.s1lesson = null; render(); window.scrollTo({top:0}); if(T.open) renderTutor(); break;
     case "s1-lesson": U.view = "lesson"; U.s1lesson = d.id; U.s1m = 0; U.s1mReveal = null; render(); window.scrollTo({top:0}); if(T.open) renderTutor(); break;
     case "s1-lessondone": { const L = S1_LESSONS.find(l=>l.id===d.id); if(!s1().lessons[d.id]){ s1().lessons[d.id] = true; addXP(10, "Lesson done: "+L.title); } save(); U.s1lesson = null;
-      if(L.skills.filter(x=>x!=="define").length){ makeSet(L.skills.filter(x=>x!=="define")[0]); s1().set.focus = null; U.view = "practice"; } else U.view = "lesson";
+      if(L.skills.filter(x=>x!=="define").length){ const ssL = s1Stats(); const sks = L.skills.filter(x=>x!=="define"); const need = sks.find(sk=>!(ssL[sk].n>=4 && ssL[sk].score>=.75)) || sks[0]; makeSet(need); s1().set.focus = null; U.view = "practice"; } else U.view = "lesson";
       render(); window.scrollTo({top:0}); break; }
     case "s1-method": U.s1m = +d.i; render(); break;
     case "s1-mreveal": U.s1mReveal = +d.i; render(); break;
@@ -7773,8 +7773,10 @@ function pickItem(skill, exclude){
   if(missed.length) return missed[0].uid;
   return cands.sort((a,b)=>(st.seen[a.uid].at||0)-(st.seen[b.uid].at||0))[0].uid;
 }
+function gateNeed(){ const st = s1(); const ss = s1Stats(); const nl = S1_LESSONS.findIndex(l=>!st.lessons[l.id]); if(nl<=0 || lessonUnlocked(nl)) return []; const prev = S1_LESSONS[nl-1]; if(!st.lessons[prev.id]) return []; return prev.skills.filter(sk=>sk!=="define" && !(ss[sk].n>=4 && ss[sk].score>=.75)); }
 function makeSet(focus){
   const st = s1(); const avail = availSkills(); if(!avail.length) return null;
+  if(!focus){ const g = gateNeed(); if(g.length) focus = g[0]; }
   const ss = s1Stats(); const lastLesson = S1_LESSONS.filter(l=>st.lessons[l.id] && l.skills.some(s=>s!=="define")).pop();
   const frontier = focus ? [focus] : (lastLesson ? lastLesson.skills.filter(s=>s!=="define") : [avail[avail.length-1]]);
   const weak = avail.filter(sk=>ss[sk].n>=2 && ss[sk].score<.8).sort((a,b)=>ss[a].score-ss[b].score);
@@ -8016,7 +8018,7 @@ function nextActionHTML(phase, ss){
   const nextL = S1_LESSONS.findIndex(l=>!st.lessons[l.id]);
   const avail = availSkills();
   if(nextL>=0 && lessonUnlocked(nextL)) return '<h3>Next: '+esc(S1_LESSONS[nextL].title)+'</h3><p>'+(nextL===0?"Start here. We begin with the word itself.":"You’re solid on what came before, so the next lesson is open.")+'</p><div class="row"><button class="btn primary" data-act="s1-lesson" data-id="'+S1_LESSONS[nextL].id+'">Start lesson</button>'+(avail.length?'<button class="btn" data-act="s1-set">Practice set</button>':"")+'</div>';
-  if(nextL>=0) return '<h3>Practice to unlock the next lesson</h3><p>Next lesson needs: '+lessonGate(nextL).join(", ")+' (4+ answers at 75%+).</p><div><button class="btn primary" data-act="s1-set">Practice set of 5</button></div>';
+  if(nextL>=0){ const need = gateNeed(); return '<h3>Practice to unlock the next lesson</h3><p>To open <strong>'+esc(S1_LESSONS[nextL].title)+'</strong> you need at least 4 answers at 75% or better in:</p><ul class="criteria">'+need.map(sk=>{ const v = ss[sk]; return '<li><span class="no">\u25cb</span><span><strong>'+esc(S1_SKILLS.find(x=>x.id===sk).label)+':</strong> '+v.n+' of 4 answers so far'+(v.n?' ('+Math.round(v.score*100)+'% right)':'')+'</span></li>'; }).join("")+'</ul><p class="muted" style="font-size:.88rem">The next practice set focuses on exactly this. Answers where you used I DON\u2019T UNDERSTAND before answering don\u2019t count toward unlocking, so try each one on your own first.</p><div><button class="btn primary" data-act="s1-set">Practice set of 5</button></div>'; }
   const missing = S1_SKILLS.filter(sk=>!ss[sk.id].solid).map(sk=>sk.label);
   return '<h3>Build to mastery</h3><p>'+(missing.length?"Still building: "+missing.join(", ")+".":"")+' '+(ss._exposures<40?"At least "+(40-ss._exposures)+" more practice questions before the exam.":"")+'</p><div class="row"><button class="btn primary" data-act="s1-set">Practice set of 5</button>'+(!ss.define.solid?'<button class="btn" data-act="s1-lesson" data-id="own">Say it in your own words</button>':"")+'</div>';
 }
