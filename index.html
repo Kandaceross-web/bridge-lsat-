@@ -7372,7 +7372,7 @@ document.addEventListener("click", e=>{
         else { r.due = Date.now()+12*3600e3; r.run.retry = true; st.remedSets = 0; } }
       save(); render(); window.scrollTo({top:0}); break; }
     case "s1-teachcheck": s1TeachCheck(); break;
-    case "s1-teachself": { const ks=["a","b","c","d"]; const got = ks.filter(k=>$("#s1self-"+k)?.checked); const passed = got.length===4; s1().teach = {passed, verdict: passed?"got_it":got.length>=2?"almost":"not_yet", strengths: got.length?["You covered "+got.length+" of the 4 parts."]:[], gaps: passed?[]:["Add what\u2019s missing, then check again."], at:Date.now(), self:true}; if(passed){ s1().lessons.own = true; addXP(15,"Teach-back done"); } U.s1teachSelf=false; save(); render(); break; }
+    case "s1-teachself": { const ks=["a","b","c","d"]; const sel = U.s1self||{}; const got = ks.filter(k=>sel[k] || $("#s1self-"+k)?.checked); if(!got.length){ toast("Tick each part your explanation covers first."); break; } const passed = got.length===4; const missing = ks.filter(k=>!got.includes(k)).map(k=>S1_SELF_PARTS[k].fix); s1().teach = {passed, verdict: passed?"got_it":got.length>=2?"almost":"not_yet", strengths: ["You covered "+got.length+" of the 4 parts."], gaps: missing, at:Date.now(), self:true}; if(passed){ s1().lessons.own = true; addXP(15,"Teach-back done"); U.s1teachSelf=false; U.s1self={}; } save(); render(); break; }
     case "reveal": U.rev = U.rev||{}; U.rev[d.k] = true; render(); break;
     case "doing": U.doing = U.doing||{}; U.doing[d.uid] = !U.doing[d.uid]; render(); break;
     case "normal": sayNormal(d.uid); break;
@@ -7395,6 +7395,7 @@ document.addEventListener("change", e=>{
   if(a==="plan-hours"){ S.plan.hours = parseInt(e.target.value,10); save(); render(); }
   if(a==="plan-essays"){ S.plan.essays = Math.max(0, parseInt(e.target.value,10)||0); save(); render(); }
   if(a==="t-level"){ T.level = e.target.value || null; }
+  if(a==="s1self"){ U.s1self = U.s1self||{}; U.s1self[e.target.dataset.k] = e.target.checked; }
 });
 document.addEventListener("input", e=>{ if(e.target.id==="teach-text") U.teachDraft = e.target.value; if(e.target.id==="s1-teach") U.s1teach = e.target.value; });
 document.addEventListener("submit", e=>{ if(e.target.id==="t-form"){ e.preventDefault(); const i=$("#t-in"); const v=i.value.trim(); if(v){ i.value=""; ask(v); } } });
@@ -8086,9 +8087,9 @@ const LESSON_BODY = {
     ["last","important","fact","background","opposing","middle"].map((k,i)=>{ const T = TRAPS_C[k]; return '<section class="panel stack"><span class="mono">Mistake '+(i+1)+'</span><h3>'+esc(T.name)+'</h3><p><strong>Why it’s tempting:</strong> '+esc(T.made)+'</p><p><strong>Why it’s wrong:</strong> '+esc(T.wrong)+'</p><div class="note">'+esc(T.easy)+'</div><p class="muted"><strong>Remember:</strong> '+esc(T.trick)+'</p></section>'; }).join("")+
     sec("Also watch for", '<ul class="prose" style="padding-left:20px"><li><strong>Examples</strong> (“For example, …”) are support, never the point.</li><li><strong>Opinions with no support.</strong> A strong opinion that nothing else in the passage backs up isn’t functioning as the conclusion. The conclusion is the claim that gets support.</li></ul><p class="muted">Background and other people’s views each get their own full steps later. For now, just know they aren’t the author’s point.</p>'),
 
-  own: ()=> { const t = s1().teach;
+  own: ()=> { const t = s1().teach; if(t && !t.passed && t.self) U.s1teachSelf = true;
     return sec("Now you’re the teacher", '<p class="lead">Explain it to me in your own words, like you’re teaching a friend:</p><ol class="prose" style="padding-left:20px"><li>What a conclusion is, in plain words.</li><li>The LSAT definition, in your own words.</li><li>How you find one (a signpost word or a test).</li><li>Your own example, with the conclusion pointed out.</li></ol><textarea class="big" id="s1-teach" placeholder="A conclusion is…">'+esc(U.s1teach||"")+'</textarea><div class="row"><button class="btn primary" data-act="s1-teachcheck"'+(U.s1teachBusy?" disabled":"")+'>'+(U.s1teachBusy?"Reading your explanation…":"Check my explanation")+'</button></div>'+
-      (U.s1teachSelf?'<div class="note"><h4>The live tutor isn’t available here, so check yourself honestly</h4><div class="stack" style="gap:6px;margin-top:8px">'+[["a","I said what a conclusion is in plain words"],["b","I explained the LSAT definition in my own words"],["c","I named a signpost word or a test I use to find it"],["d","I gave my own example and pointed out its conclusion"]].map(([k,l])=>'<label class="switch"><input type="checkbox" id="s1self-'+k+'"><span>'+l+'</span></label>').join("")+'</div><div style="margin-top:10px"><button class="btn" data-act="s1-teachself">Save self-check</button></div></div>':"")+
+      (U.s1teachSelf?'<div class="note"><h4>The live tutor isn’t available here, so check yourself honestly</h4><div class="stack" style="gap:6px;margin-top:8px">'+["a","b","c","d"].map(k=>{ const P = S1_SELF_PARTS[k]; const hit = P.re.test(U.s1teach||""); return '<label class="switch"><input type="checkbox" id="s1self-'+k+'" data-act="s1self" data-k="'+k+'"'+((U.s1self||{})[k]?" checked":"")+'><span>'+P.label+(hit?' <span class="muted" style="font-size:.85rem">(looks like you did)</span>':' <span class="muted" style="font-size:.85rem">(I can\u2019t spot this one: '+P.hint+')</span>')+'</span></label>'; }).join("")+'</div><p class="muted" style="font-size:.85rem;margin:8px 0 0">Tick every box that\u2019s true. All 4 finishes the lesson.</p><div style="margin-top:10px"><button class="btn primary" data-act="s1-teachself">Save self-check</button></div></div>':"")+
       (t?'<div class="note '+(t.passed?"good":"warn")+'"><h4>'+(t.passed?"You’ve got it.":t.verdict==="almost"?"Almost there.":"Not yet, and that’s useful to know.")+'</h4>'+(t.strengths&&t.strengths.length?'<p><strong>What you nailed:</strong> '+esc(t.strengths.join(" "))+'</p>':"")+(t.gaps&&t.gaps.length?'<p><strong>What’s missing:</strong> '+esc(t.gaps.join(" "))+'</p>':"")+(t.reteach?'<p><strong>Another way to see it:</strong> '+esc(t.reteach)+'</p>':"")+'</div>':""));
   }
 };
@@ -8441,6 +8442,12 @@ function s1Lvl(){ const st = s1(); if(st.mastered) return 5; const ph = s1Phase(
 if(S.plan){ if(S.plan.start && !S.plan.target) S.plan.target = 170; if(!S.plan.stretch) S.plan.stretch = 175; if(!S.plan.minimum) S.plan.minimum = 165; }
 loadGenerated();
 setTimeout(initGenStore, 300);
+const S1_SELF_PARTS = {
+  a:{label:"I said what a conclusion is in plain words", re:/believe|point|convinc|trying to (prove|say|get)|want(s)? (you|me|us)|main idea|argu/i, hint:"say what the author wants you to believe", fix:"Say in plain words what a conclusion is (what the author wants you to believe)."},
+  b:{label:"I explained the LSAT definition in my own words", re:/support|reason|evidence|premise|back(ed)? up|prove/i, hint:"mention that the reasons or evidence support it", fix:"Add the LSAT version: it\u2019s the claim the reasons or evidence are there to support."},
+  c:{label:"I named a signpost word or a test I use to find it", re:/therefore|thus|hence|so |consequently|accordingly|why should|why (do|would)|because test|signpost|clearly|it follows/i, hint:"name a word like therefore, or the \u201cwhy should I believe this?\u201d test", fix:"Name how you find it: a word like therefore/thus, or ask \u201cwhy should I believe this?\u201d"},
+  d:{label:"I gave my own example and pointed out its conclusion", re:/example|for instance|e\.g\.|like when|say (that )?|imagine/i, hint:"give a short example and say which part is the conclusion", fix:"Give your own short example and say which sentence is the conclusion."}
+};
 /* boot */
 if(S.welcomed && !S.steps.idea && U.view==="today"){}
 render(); renderTutor();
