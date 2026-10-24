@@ -361,6 +361,7 @@ input.field{font:inherit;border:1px solid var(--line);border-radius:8px;padding:
       <button data-act="nav" data-v="guide">Study guide</button>
       <button data-act="nav" data-v="ind">Indicator words</button>
       <button data-act="nav" data-v="px">Practice exams</button>
+      <button data-act="nav" data-v="off">Official LSAT</button>
       <button data-act="nav" data-v="words">Vocabulary</button>
       <button data-act="nav" data-v="plan">My year</button>
       <button data-act="nav" data-v="journal">Error journal</button>
@@ -6434,7 +6435,7 @@ const idkBtn = (ctx, disabled) => '<button class="idk" data-act="idk" data-ctx="
 function render(){
   const navV = ({practice:"lesson",exam:"lesson",ret:"lesson",drill:"words",review:"today"})[U.view]||U.view; document.querySelectorAll("#nav button").forEach(b=>b.setAttribute("aria-current", b.dataset.v===navV?"page":"false"));
   const m = $("#main");
-  m.innerHTML = U.view==="today" ? vToday() : U.view==="lesson" ? vStairs() : U.view==="words" ? vWords() : U.view==="drill" ? vDrill() : U.view==="practice" ? vPractice() : U.view==="exam" ? vExam() : U.view==="ret" ? vRetention() : U.view==="journal" ? vJournal() : U.view==="guide" ? vGuide() : U.view==="vday" ? vVday() : U.view==="dl" ? vDL() : U.view==="sum" ? vSum() : U.view==="hist" ? vHist() : U.view==="ind" ? vInd() : U.view==="px" ? vPX() : U.view==="run" ? vRun() : U.view==="review" ? vReview() : U.view==="plan" ? vPlan() : vSettings();
+  m.innerHTML = U.view==="today" ? vToday() : U.view==="lesson" ? vStairs() : U.view==="words" ? vWords() : U.view==="drill" ? vDrill() : U.view==="practice" ? vPractice() : U.view==="exam" ? vExam() : U.view==="ret" ? vRetention() : U.view==="journal" ? vJournal() : U.view==="guide" ? vGuide() : U.view==="vday" ? vVday() : U.view==="dl" ? vDL() : U.view==="sum" ? vSum() : U.view==="hist" ? vHist() : U.view==="off" ? vOff() : U.view==="ind" ? vInd() : U.view==="px" ? vPX() : U.view==="run" ? vRun() : U.view==="review" ? vReview() : U.view==="plan" ? vPlan() : vSettings();
   renderStats(); renderTutorHead();
 }
 function renderStats(){
@@ -7393,6 +7394,13 @@ document.addEventListener("click", e=>{
     case "day-check": { const D = dayRec(); D.check[d.k] = !D.check[d.k]; save(); render(); break; }
     case "week-vocab": { const ids = shuffle(learnedIds()).slice(0,30); if(ids.length<10){ toast("Not enough learned words for the weekly check yet."); break; } U.vd = {kind:"weekly", title:"Weekly cumulative vocabulary ("+ids.length+")", items:ids.map((id,i)=>[qContext,qDef,qReverse][i%3](id)), i:0, chosen:null, answered:false, t0:Date.now(), res:[]}; U.view = "drill"; render(); break; }
     case "week-mixed": runStart({mode:"weekly", title:"Weekly mixed LSAT review (20)", items:adaptivePick(LR_ITEMS.concat(PX.struct.pool().filter(ok4px), PX.conc.pool().filter(ok4px)), 20)}); break;
+    case "off-tab": U.offTab = d.v; render(); break;
+    case "off-pick": U.offSel = U.offSel||{}; (U.offSel[d.k] = U.offSel[d.k]||{}).pick = d.v; render(); break;
+    case "off-conf": break;
+    case "off-cal": if(d.v==="t") timedStart(calPool(), 10, "Official-calibrated LR (timed)", 84); else runStart({mode:"adv", title:"Official-calibrated LR", items:adaptivePick(calPool(), 10)}); break;
+    case "off-check": offCheck(d.k); break;
+    case "off-redo": delete offS()[d.k]; if(U.offSel) delete U.offSel[d.k]; save(); render(); break;
+    case "off-err": offS()[d.k].etype = d.v; save(); render(); break;
     case "hist-day": U.histDay = d.d; render(); break;
     case "hist-month": { const [y,m] = (U.histMonth||today().slice(0,7)).split("-").map(Number); const dt = new Date(y, m-1+(+d.v), 1); U.histMonth = dt.getFullYear()+"-"+String(dt.getMonth()+1).padStart(2,"0"); render(); break; }
     case "step-go": if(goStep(+d.n)){ U.view = "lesson"; render(); window.scrollTo({top:0}); if(T.open) renderTutor(); } break;
@@ -13634,6 +13642,439 @@ const LR_TYPES = [
 { id:"rc", name:"Reading Comprehension method", stems:["Which one of the following most accurately expresses the main point of the passage?","The author of the passage would most likely agree with which one of the following?"], plain:"Reading Comprehension tests whether you can follow an argument across several paragraphs. The key is separating the author's view from views the author describes.", lsat:"Passages present at least two positions, and many questions ask which view belongs to whom. Correct answers are supported by the text; wrong ones distort, overstate, or import outside ideas.", method:["Read for structure: whose view is each paragraph?","Mark pivot words like but, yet, however.","Summarize each paragraph in five words.","State the author's main point and attitude before the questions.","Go back to the text to confirm every answer."], traps:["Another person's view presented as the author's","Extreme language that outruns the passage","True details that do not answer the question","Outside knowledge that the passage does not support"], example:"A passage says critics see a policy as wasteful, but the author argues its long-term savings justify the cost. A question asking the author's view should be answered with the savings claim, while the 'wasteful' answer is the critics' view, not the author's.", tip:"Who says it? Then what does it do?" }
 ];
 
+const LR_CAL = [
+// ===================== POINT AT ISSUE =====================
+{ id:"lrc001", kind:"mcq", type:"Point at issue", level:3, speaker:null,
+  sents:[
+    {t:"Moreno: The city library should abolish its fines for overdue books.", role:"conclusion"},
+    {t:"Libraries that have dropped such fines report that borrowers return books at nearly the same rate as before, and the fines mainly discourage low-income patrons from borrowing at all.", role:"premise"},
+    {t:"Hadley: The fines are a small inconvenience, and they teach borrowers responsibility.", role:"premise"},
+    {t:"Besides, fine revenue pays for the library's weekend hours, so abolishing the fines would hurt the very patrons you want to help.", role:"opposing"}],
+  stem:"Moreno and Hadley disagree over whether", answer:"A",
+  choices:[
+    {l:"A", t:"the city library ought to stop charging borrowers fines when they return books after the due date", why:"Correct. Moreno says the library should abolish the fines; Hadley argues that abolishing them would hurt patrons, so she rejects the proposal.", trap:null, trapName:null},
+    {l:"B", t:"libraries that dropped overdue fines saw books returned at nearly the same rate as they were before", why:"Only Moreno addresses return rates. Hadley never disputes the claim; she objects on other grounds.", trap:"scope", trapName:"Only one speaker"},
+    {l:"C", t:"the revenue the library collects from overdue fines is currently what pays for its weekend hours", why:"Only Hadley makes this claim. Moreno says nothing about how weekend hours are funded.", trap:"scope", trapName:"Only one speaker"},
+    {l:"D", t:"overdue fines discourage low-income patrons from borrowing books from the city library at all", why:"Moreno asserts this, but Hadley does not deny it; her worry about hurting those patrons concerns lost weekend hours.", trap:"infer", trapName:"Not contested"},
+    {l:"E", t:"teaching borrowers to be responsible is a legitimate goal for a public library to pursue", why:"Hadley implies this, but Moreno never addresses it, so no disagreement is shown.", trap:"scope", trapName:"Only one speaker"}] },
+
+{ id:"lrc002", kind:"mcq", type:"Point at issue", level:3, speaker:null,
+  sents:[
+    {t:"Ilse: Scientific journals should require all authors to publish their raw data alongside their articles.", role:"conclusion"},
+    {t:"Without access to the data, other researchers cannot check whether reported results are accurate, and errors can persist in the literature for years.", role:"premise"},
+    {t:"Tomas: For studies of human subjects, such a requirement would be a mistake.", role:"opposing"},
+    {t:"Even anonymized data sets can often be traced to individual participants, and protecting participants must take priority over making verification easier.", role:"premise"}],
+  stem:"Ilse and Tomas disagree over whether", answer:"B",
+  choices:[
+    {l:"A", t:"errors in published research can persist for years when other researchers cannot examine the underlying data", why:"Only Ilse makes this claim, and Tomas does not challenge it.", trap:"scope", trapName:"Only one speaker"},
+    {l:"B", t:"journals should require authors who study human subjects to publish their raw data along with their articles", why:"Correct. Ilse wants the requirement for all authors, which includes these; Tomas says it would be a mistake for studies of human subjects.", trap:null, trapName:null},
+    {l:"C", t:"protecting the privacy of research participants is more important than making verification of results easier", why:"Tomas asserts this priority, but Ilse never weighs privacy against verification.", trap:"scope", trapName:"Only one speaker"},
+    {l:"D", t:"anonymized data sets drawn from studies of human subjects can usually be traced to individual participants", why:"Ilse is silent on this, and Tomas says only 'often', not 'usually'.", trap:"degree", trapName:"Too strong"},
+    {l:"E", t:"allowing other researchers to verify reported results is the primary purpose of the peer review process", why:"Neither speaker mentions peer review or its purpose.", trap:"scope", trapName:"Out of scope"}] },
+
+{ id:"lrc003", kind:"mcq", type:"Point at issue", level:3, speaker:null,
+  sents:[
+    {t:"Rana: The council's plan to make Elm Street a pedestrian-only zone will cut sales at the shops there.", role:"conclusion"},
+    {t:"Most of their customers arrive by car, and many will not walk the two blocks from the new parking garage.", role:"premise"},
+    {t:"Weiss: Shops on similar streets in other towns saw sales rise after cars were banned, because pedestrians linger and browse.", role:"premise"},
+    {t:"Elm Street's merchants have little to fear from the plan.", role:"opposing"}],
+  stem:"Rana and Weiss disagree over whether", answer:"C",
+  choices:[
+    {l:"A", t:"most of the customers who currently shop at the stores on Elm Street arrive there by car", why:"Only Rana addresses how customers arrive; Weiss neither affirms nor denies it.", trap:"scope", trapName:"Only one speaker"},
+    {l:"B", t:"sales rose at shops on similar streets in other towns after cars were banned from those streets", why:"Only Weiss reports this, and Rana never disputes what happened elsewhere.", trap:"scope", trapName:"Only one speaker"},
+    {l:"C", t:"making Elm Street a pedestrian-only zone will reduce the sales of the shops located on that street", why:"Correct. Rana says the plan will cut sales; Weiss says the merchants have little to fear from it.", trap:null, trapName:null},
+    {l:"D", t:"the town council ought to build a new parking garage within easy walking distance of Elm Street", why:"Rana mentions a garage that already exists; neither speaker argues about whether one should be built.", trap:"scope", trapName:"Out of scope"},
+    {l:"E", t:"shoppers who arrive on foot tend to spend more time browsing in stores than shoppers who drive", why:"Weiss suggests something like this, but Rana never addresses browsing habits.", trap:"scope", trapName:"Only one speaker"}] },
+
+{ id:"lrc004", kind:"mcq", type:"Point at issue", level:3, speaker:null,
+  sents:[
+    {t:"Petra: It is wrong to tell a dying patient a comforting falsehood about his prognosis, even if he would be happier believing it.", role:"conclusion"},
+    {t:"People have a right to the truth about their own lives, and that right does not lapse at the end.", role:"premise"},
+    {t:"Joaquin: Sometimes the comforting falsehood is the kinder choice.", role:"opposing"},
+    {t:"When the truth would only distress a dying patient and he can do nothing with it, a gentle lie is permissible.", role:"premise"}],
+  stem:"The dialogue most strongly supports the claim that Petra and Joaquin disagree about whether", answer:"D",
+  choices:[
+    {l:"A", t:"people have a right to know the truth about their own lives, including facts about their health", why:"Petra asserts this right, but Joaquin never denies it; he could hold that the right is sometimes outweighed.", trap:"infer", trapName:"Not contested"},
+    {l:"B", t:"most dying patients would prefer to hear a comforting falsehood rather than the truth about their prognosis", why:"Neither speaker claims anything about what most patients prefer.", trap:"scope", trapName:"Out of scope"},
+    {l:"C", t:"physicians should always disclose a patient's prognosis when the patient asks about it directly", why:"Neither speaker addresses cases in which the patient asks directly.", trap:"scope", trapName:"Out of scope"},
+    {l:"D", t:"it can be permissible to tell a dying patient a comforting falsehood about his prognosis", why:"Correct. Petra says such a falsehood is wrong even if it makes him happier; Joaquin says it is sometimes permissible.", trap:null, trapName:null},
+    {l:"E", t:"dying patients are generally unable to do anything useful with information about their prognosis", why:"Joaquin describes only some cases, not patients generally, and Petra is silent on the point.", trap:"degree", trapName:"Too broad"}] },
+
+{ id:"lrc005", kind:"mcq", type:"Point at issue", level:4, speaker:null,
+  sents:[
+    {t:"Lindqvist: A translator of poetry must sometimes abandon the literal sense of a line to preserve its rhythm and rhyme, since a poem's sound is part of what it means.", role:"conclusion"},
+    {t:"A literal translation of a sonnet is not a sonnet at all.", role:"premise"},
+    {t:"Osei: Readers of a translation are entitled to know what the poet actually said.", role:"opposing"},
+    {t:"Any competent versifier can recreate a rhyme, but once a translator alters the sense of a line, readers have no way to recover it.", role:"premise"}],
+  stem:"Lindqvist and Osei disagree over whether", answer:"E",
+  choices:[
+    {l:"A", t:"the sound of a poem, including its rhythm and rhyme, is part of what the poem means", why:"Lindqvist asserts this, but Osei never denies that sound matters; he argues only that sense should not be sacrificed.", trap:"infer", trapName:"Not contested"},
+    {l:"B", t:"a literal translation of a sonnet fails to preserve the features that make the original a sonnet", why:"Only Lindqvist makes this claim; Osei does not address what makes a sonnet.", trap:"scope", trapName:"Only one speaker"},
+    {l:"C", t:"a competent versifier is able to recreate the rhymes of a poem in the language of the translation", why:"Osei asserts this, and Lindqvist never denies it.", trap:"scope", trapName:"Only one speaker"},
+    {l:"D", t:"readers of a translation can recover a line's original sense after a translator has changed it", why:"Osei denies this, but Lindqvist never suggests that readers can recover it.", trap:"scope", trapName:"Only one speaker"},
+    {l:"E", t:"a translator of poetry is sometimes justified in departing from a line's literal sense to preserve its sound", why:"Correct. Lindqvist says a translator must sometimes do this; Osei holds that readers are entitled to the poet's actual sense, which altering it destroys.", trap:null, trapName:null}] },
+
+{ id:"lrc006", kind:"mcq", type:"Point at issue", level:4, speaker:null,
+  sents:[
+    {t:"Farrow: Laws forbidding sharp price increases after natural disasters do more harm than good.", role:"conclusion"},
+    {t:"When prices cannot rise, the first customers to arrive buy up scarce goods such as generators, and suppliers in distant regions have no incentive to rush more goods into the stricken area.", role:"premise"},
+    {t:"Nakamura: You assume that getting more goods into the area is all that matters.", role:"opposing"},
+    {t:"High prices ration necessities by wealth, so a family with an injured child can be outbid by a family that wants to run its television.", role:"premise"},
+    {t:"Such laws are a reasonable way to keep necessities from going to whoever can pay the most.", role:"premise"}],
+  stem:"The dialogue most strongly supports the claim that Farrow and Nakamura disagree about whether", answer:"A",
+  choices:[
+    {l:"A", t:"laws that forbid sharp price increases after natural disasters do more harm than good overall", why:"Correct. Farrow states this directly; Nakamura defends such laws as a reasonable way to keep necessities from the highest bidder.", trap:null, trapName:null},
+    {l:"B", t:"high prices after a disaster tend to allocate scarce goods according to wealth rather than need", why:"Nakamura asserts this, and nothing Farrow says denies it; his case rests on supply, not fairness of allocation.", trap:"infer", trapName:"Not contested"},
+    {l:"C", t:"suppliers in distant regions send more goods into a stricken area when prices there are allowed to rise", why:"Farrow implies this, and Nakamura does not deny it; she argues that supply is not all that matters.", trap:"infer", trapName:"Not contested"},
+    {l:"D", t:"generators should be classified as necessities rather than conveniences after a natural disaster", why:"Neither speaker argues about how generators should be classified.", trap:"scope", trapName:"Out of scope"},
+    {l:"E", t:"the first customers to reach a store after a disaster buy most of its supply of scarce goods", why:"Only Farrow addresses this, and Nakamura never challenges it.", trap:"scope", trapName:"Only one speaker"}] },
+
+{ id:"lrc007", kind:"mcq", type:"Point at issue", level:4, speaker:null,
+  sents:[
+    {t:"Bauer: The steady rise in average grades at universities shows that academic standards have slipped.", role:"conclusion"},
+    {t:"Professors face pressure from student evaluations, and an easy grader is rewarded with better reviews.", role:"premise"},
+    {t:"Kimura: Rising grades need not reflect lower standards.", role:"opposing"},
+    {t:"Admission to selective universities has become far more competitive, so today's students are better prepared than their predecessors, and higher grades may simply reflect better work.", role:"premise"}],
+  stem:"Bauer and Kimura disagree over whether", answer:"B",
+  choices:[
+    {l:"A", t:"professors who grade leniently tend to receive more favorable evaluations from their students", why:"Only Bauer makes this claim; Kimura never addresses evaluations.", trap:"scope", trapName:"Only one speaker"},
+    {l:"B", t:"the rise in average grades at universities establishes that academic standards have declined", why:"Correct. Bauer says the rise shows standards slipped; Kimura says rising grades need not reflect lower standards.", trap:null, trapName:null},
+    {l:"C", t:"admission to selective universities is far more competitive now than it was in the past", why:"Kimura asserts this, and Bauer never disputes it.", trap:"scope", trapName:"Only one speaker"},
+    {l:"D", t:"universities ought to stop using student evaluations when deciding whether to promote professors", why:"Neither speaker proposes any change to how evaluations are used.", trap:"scope", trapName:"Out of scope"},
+    {l:"E", t:"the higher grades at selective universities are caused primarily by students' better preparation", why:"Kimura says only that higher grades may reflect better work, so she is not committed to this causal claim.", trap:"degree", trapName:"Too strong"}] },
+
+{ id:"lrc008", kind:"mcq", type:"Point at issue", level:4, speaker:null,
+  sents:[
+    {t:"Varga: The commission was wrong to grant landmark status to the old cannery.", role:"conclusion"},
+    {t:"The building has no architectural distinction, and preserving it will block housing the city badly needs.", role:"premise"},
+    {t:"Ellison: Architectural distinction is not the only basis for landmark status.", role:"opposing"},
+    {t:"The city's first labor union organized in that cannery, and a building can deserve preservation for what happened in it.", role:"premise"},
+    {t:"As for housing, the site's owner says the land is too contaminated to build on without costly cleanup.", role:"premise"}],
+  stem:"The dialogue most strongly supports the claim that Varga and Ellison disagree about whether", answer:"C",
+  choices:[
+    {l:"A", t:"the old cannery building lacks the architectural distinction that would make it notable as a design", why:"Ellison never claims the building is architecturally distinguished; she argues that distinction is not required.", trap:"infer", trapName:"Not contested"},
+    {l:"B", t:"architectural distinction is the only basis on which a building can properly be granted landmark status", why:"Ellison denies this, but Varga never says distinction is the only basis; he also cites housing.", trap:"degree", trapName:"Too strong"},
+    {l:"C", t:"the commission acted wrongly when it granted landmark status to the city's old cannery building", why:"Correct. Varga says the decision was wrong; Ellison rebuts both of his reasons, defending the decision.", trap:null, trapName:null},
+    {l:"D", t:"contamination at the cannery site makes it costly to build housing there without a cleanup first", why:"Only Ellison raises contamination; Varga is silent about it.", trap:"scope", trapName:"Only one speaker"},
+    {l:"E", t:"the city is currently in serious need of additional housing for its residents", why:"Only Varga asserts this, and Ellison never denies the need.", trap:"scope", trapName:"Only one speaker"}] },
+
+{ id:"lrc009", kind:"mcq", type:"Point at issue", level:4, speaker:null,
+  sents:[
+    {t:"Holm: The clinic should offer the new blood test for early pancreatic cancer to all of its patients over sixty.", role:"conclusion"},
+    {t:"Catching the disease early saves lives, and the test detects most such cancers months before symptoms appear.", role:"premise"},
+    {t:"Adeyemi: Early detection saves lives only if early treatment works better than later treatment, and for this cancer the evidence on that is mixed.", role:"premise"},
+    {t:"Meanwhile, the test's false positives would send many healthy patients for invasive biopsies.", role:"opposing"}],
+  stem:"The dialogue most strongly supports the claim that Holm and Adeyemi disagree about whether", answer:"D",
+  choices:[
+    {l:"A", t:"the new blood test detects most pancreatic cancers several months before any symptoms appear", why:"Holm asserts this, and Adeyemi does not challenge the test's detection rate.", trap:"scope", trapName:"Only one speaker"},
+    {l:"B", t:"the test's false positive results would lead many healthy patients to undergo invasive biopsies", why:"Only Adeyemi raises false positives; Holm is silent about them.", trap:"scope", trapName:"Only one speaker"},
+    {l:"C", t:"patients who receive a positive result from a screening test should always undergo a biopsy", why:"Neither speaker states a policy about what should follow a positive result.", trap:"scope", trapName:"Out of scope"},
+    {l:"D", t:"the clinic ought to offer the new blood test to all of its patients who are over sixty", why:"Correct. Holm recommends this; Adeyemi questions its benefit and cites its harms, opposing the recommendation.", trap:null, trapName:null},
+    {l:"E", t:"a screening test should be offered to patients only if it produces no false positive results at all", why:"Adeyemi counts false positives as a cost but never says any false positive disqualifies a test.", trap:"degree", trapName:"Too strong"}] },
+
+{ id:"lrc010", kind:"mcq", type:"Point at issue", level:5, speaker:null,
+  sents:[
+    {t:"Sato: A court should overrule one of its own precedents only when the precedent was wrongly decided.", role:"conclusion"},
+    {t:"That circumstances have changed since a decision was issued gives no reason to abandon it, because the law's authority depends on its stability.", role:"premise"},
+    {t:"Ortiz: Stability matters, but a precedent that was correct when decided can become unjust as circumstances change.", role:"opposing"},
+    {t:"A rule about liability for telegraph companies, applied unchanged to modern networks, can yield results its authors would never have endorsed.", role:"premise"},
+    {t:"Courts must be able to revise such rules even when no error was made originally.", role:"premise"}],
+  stem:"Sato and Ortiz disagree over whether", answer:"E",
+  choices:[
+    {l:"A", t:"the authority of the law depends at least partly on the stability of the rules that courts apply", why:"Both accept this: Sato states it, and Ortiz concedes that stability matters.", trap:"infer", trapName:"Both agree"},
+    {l:"B", t:"a court should overrule any precedent of its own that it concludes was wrongly decided", why:"Sato makes a wrong decision necessary for overruling, not sufficient, and Ortiz says nothing about wrongly decided cases.", trap:"word", trapName:"Necessary vs. sufficient"},
+    {l:"C", t:"the authors of a precedent would have endorsed applying it unchanged to modern circumstances", why:"Ortiz suggests they might not have, but Sato says nothing about the authors' views.", trap:"scope", trapName:"Only one speaker"},
+    {l:"D", t:"a precedent that produces unjust results under present conditions must have been wrongly decided", why:"Ortiz denies this, but Sato never claims it; his view concerns when to overrule, not what injustice proves.", trap:"scope", trapName:"Only one speaker"},
+    {l:"E", t:"changed circumstances alone can justify a court in overruling a precedent that was correctly decided", why:"Correct. Sato says changed circumstances give no reason to abandon a precedent; Ortiz says courts must be able to revise correct rules as circumstances change.", trap:null, trapName:null}] },
+
+{ id:"lrc011", kind:"mcq", type:"Point at issue", level:5, speaker:null,
+  sents:[
+    {t:"Mireille: The painting recently reattributed to the master's workshop is no less beautiful than it was last year, when everyone believed the master himself painted it.", role:"premise"},
+    {t:"So the drop in its auction value shows that collectors care about prestige, not about art.", role:"conclusion"},
+    {t:"Hollis: A painting's value is not only a matter of how it looks.", role:"opposing"},
+    {t:"A work by the master is evidence of what one extraordinary person could do, and learning that someone else painted it changes what the painting tells us, even if the brushstrokes are the same.", role:"premise"}],
+  stem:"The dialogue most strongly supports the claim that Mireille and Hollis disagree about whether", answer:"A",
+  choices:[
+    {l:"A", t:"the fall in the painting's auction value shows that collectors care about prestige rather than about art", why:"Correct. Mireille draws exactly this conclusion; Hollis offers an artistic reason for valuing the master's own work, denying that the drop reflects mere prestige.", trap:null, trapName:null},
+    {l:"B", t:"the painting is just as beautiful now as it was before it was reattributed to the master's workshop", why:"Hollis concedes the brushstrokes are unchanged and never claims the painting looks worse.", trap:"infer", trapName:"Not contested"},
+    {l:"C", t:"the painting in question was in fact produced by members of the master's workshop", why:"Both speakers accept the reattribution; neither disputes who painted it.", trap:"infer", trapName:"Both agree"},
+    {l:"D", t:"the master's workshop produced paintings of higher quality than other workshops of the same period", why:"Neither speaker compares the master's workshop with other workshops.", trap:"scope", trapName:"Out of scope"},
+    {l:"E", t:"a painting by a master is evidence of what one extraordinary person was capable of doing", why:"Only Hollis asserts this; Mireille never addresses it.", trap:"scope", trapName:"Only one speaker"}] },
+
+{ id:"lrc012", kind:"mcq", type:"Point at issue", level:5, speaker:null,
+  sents:[
+    {t:"Greer: The beetle introduced decades ago to control a weed has spread into native forests and is damaging several native shrubs.", role:"premise"},
+    {t:"This shows that releasing one species to control another is too risky to be justified, since the effects cannot be predicted.", role:"conclusion"},
+    {t:"Pillai: That beetle was released before current testing protocols existed, under which a candidate species is tested against dozens of related native plants before release.", role:"premise"},
+    {t:"The beetle tells us little about the risks of releases conducted under those protocols.", role:"opposing"}],
+  stem:"The dialogue most strongly supports the claim that Greer and Pillai disagree about whether", answer:"B",
+  choices:[
+    {l:"A", t:"the beetle that was introduced to control the weed is now damaging several kinds of native shrubs", why:"Pillai never disputes the damage; she disputes what it shows about current releases.", trap:"infer", trapName:"Not contested"},
+    {l:"B", t:"the beetle's effects are good evidence that biological control releases made today would be too risky", why:"Correct. Greer draws a general conclusion that covers all such releases; Pillai says the beetle tells us little about releases under current protocols.", trap:null, trapName:null},
+    {l:"C", t:"current testing protocols eliminate all risk that a released species will harm native plants", why:"Pillai never claims the protocols eliminate all risk, only that the old case is a poor guide.", trap:"degree", trapName:"Too strong"},
+    {l:"D", t:"the weed that the beetle was meant to control was a serious enough problem to warrant control", why:"Neither speaker discusses how serious the weed problem was.", trap:"scope", trapName:"Out of scope"},
+    {l:"E", t:"testing a candidate species against related native plants is the most reliable way to predict its effects", why:"Pillai describes the protocols but never ranks them as the most reliable method, and Greer is silent on them.", trap:"degree", trapName:"Too strong"}] },
+
+// ===================== PARALLEL FLAW =====================
+{ id:"lrc013", kind:"mcq", type:"Parallel flaw", level:3, speaker:null,
+  sents:[
+    {t:"To win the regional science fair, a student must submit a project before the March deadline and present it to the judging panel.", role:"premise"},
+    {t:"Delia submitted her project well before the deadline and presented it to the panel last week.", role:"premise"},
+    {t:"So Delia must have won the regional science fair.", role:"conclusion"}],
+  stem:"The flawed pattern of reasoning in the argument above is most similar to that in which one of the following?", answer:"C",
+  choices:[
+    {l:"A", t:"Every string player in the orchestra must audition each year. Maren plays cello in the orchestra, so she must audition this year.", why:"This applies a requirement to someone who falls under it, which is valid. The stimulus wrongly treats requirements as guarantees.", trap:"word", trapName:"Valid argument"},
+    {l:"B", t:"Each player on the new team is among the league's best at her position. So the team will surely be among the league's best teams.", why:"This moves from parts to the whole, a different flaw from treating necessary conditions as sufficient.", trap:"scope", trapName:"Different flaw"},
+    {l:"C", t:"To qualify for the housing grant, an applicant must have lived in the city two years and earn below the income limit. Ruiz meets both conditions, so he must qualify.", why:"Correct. Like the stimulus, it shows that two necessary conditions are met and concludes that the outcome must follow, treating requirements as sufficient.", trap:null, trapName:null},
+    {l:"D", t:"Anyone who qualifies for the senior discount must be over sixty-five. Okafor is not over sixty-five, so he does not qualify for the discount.", why:"This correctly reasons that failing a necessary condition rules out the outcome. It is valid.", trap:"word", trapName:"Valid argument"},
+    {l:"E", t:"The new medication relieved headaches in most patients in the trial. So it will relieve headaches in every patient who takes it after approval.", why:"This generalizes from most to all, a different flaw from confusing necessary and sufficient conditions.", trap:"scope", trapName:"Different flaw"}] },
+
+{ id:"lrc014", kind:"mcq", type:"Parallel flaw", level:3, speaker:null,
+  sents:[
+    {t:"In a survey of the city's residents, those who owned dogs reported getting considerably more exercise than those who did not.", role:"premise"},
+    {t:"Clearly, then, owning a dog causes people to exercise more, and the city should encourage dog adoption as a public health measure.", role:"conclusion"}],
+  stem:"The flawed pattern of reasoning in the argument above is most similar to that in which one of the following?", answer:"D",
+  choices:[
+    {l:"A", t:"Every employee at the firm who received a bonus last year had been praised by a supervisor. So being praised by a supervisor guarantees a bonus.", why:"This reverses a conditional, treating a necessary condition as sufficient. The stimulus instead infers causation from correlation.", trap:"scope", trapName:"Different flaw"},
+    {l:"B", t:"The town's oldest bakery has thrived for ninety years. Since a business that lasts that long must be doing something right, its new owners should change nothing.", why:"This rests on longevity or tradition, not on a correlation treated as a cause.", trap:"scope", trapName:"Different flaw"},
+    {l:"C", t:"Most residents surveyed favor expanding the park. So expanding the park must be the best use of the vacant lot beside it, and the council should approve it.", why:"This treats popularity as proof of merit, a different flaw.", trap:"scope", trapName:"Different flaw"},
+    {l:"D", t:"Towns in the region with more libraries have less vandalism. So libraries reduce vandalism, and the council should fund new libraries in towns where vandalism is a problem.", why:"Correct. Like the stimulus, it infers from an association that one factor causes the other and then recommends promoting that factor.", trap:null, trapName:null},
+    {l:"E", t:"Patients randomly assigned the supplement recovered faster than those randomly assigned a placebo. So the supplement probably speeds recovery, and doctors should consider recommending it.", why:"Random assignment controls for other causes, so this causal inference is reasonable, unlike the stimulus.", trap:"word", trapName:"Sound reasoning"}] },
+
+{ id:"lrc015", kind:"mcq", type:"Parallel flaw", level:4, speaker:null,
+  sents:[
+    {t:"Each chapter of Professor Lund's new history of the railroads is lucid and carefully argued, as even her harshest critics concede.", role:"premise"},
+    {t:"So the book as a whole must present a lucid and carefully argued thesis, and the reviewers who called its overall argument muddled must have read it carelessly.", role:"conclusion"}],
+  stem:"The flawed pattern of reasoning in the argument above is most similar to that in which one of the following?", answer:"E",
+  choices:[
+    {l:"A", t:"Every member of the planning committee voted for the proposal. Since experienced people would not endorse a bad proposal, the proposal must be a good one.", why:"This relies on the committee's authority, not on inferring a property of a whole from the properties of its parts.", trap:"scope", trapName:"Different flaw"},
+    {l:"B", t:"The novelist's earlier books were all well reviewed. So her new book, in the same genre, will probably be well reviewed too.", why:"This predicts from past cases, a weak induction rather than a part to whole inference.", trap:"scope", trapName:"Different flaw"},
+    {l:"C", t:"The orchestra received glowing reviews for last night's performance. So each musician must have played superbly, and critics who faulted the oboist were mistaken.", why:"This reverses the direction, moving from the whole to each part, while the stimulus moves from the parts to the whole.", trap:"word", trapName:"Reverses the logic"},
+    {l:"D", t:"The city's crime rate fell last year, the same year the new police chief took office. So the new chief's policies must be responsible for the drop.", why:"This infers causation from timing, a different flaw.", trap:"scope", trapName:"Different flaw"},
+    {l:"E", t:"Every scene in the new film was praised as beautifully shot and convincing. So the film must tell a coherent, convincing story, and viewers who found it disjointed were inattentive.", why:"Correct. Like the stimulus, it infers that a whole has a property because each part has it, then dismisses those who judged the whole otherwise.", trap:null, trapName:null}] },
+
+{ id:"lrc016", kind:"mcq", type:"Parallel flaw", level:4, speaker:null,
+  sents:[
+    {t:"No study has ever shown that the herbal remedy sold at the market cures insomnia.", role:"premise"},
+    {t:"Vendors have made that claim for years, but none has produced reliable evidence for it.", role:"premise"},
+    {t:"Therefore the remedy does not cure insomnia, and people who buy it for that purpose are wasting their money.", role:"conclusion"}],
+  stem:"Which one of the following arguments contains a flaw that is most similar to the flaw in the argument above?", answer:"A",
+  choices:[
+    {l:"A", t:"No one has shown that the abandoned mine on the ridge still holds silver, despite years of claims by prospectors. So it holds none, and buying mining rights there is foolish.", why:"Correct. Like the stimulus, it concludes that a claim is false merely because no one has proven it true.", trap:null, trapName:null},
+    {l:"B", t:"Several careful studies found that the remedy has no effect on blood pressure. So it is unlikely to lower blood pressure, and physicians should not recommend it for that.", why:"This rests on positive evidence that the remedy has no effect, which is reasonable, not on a mere absence of proof.", trap:"word", trapName:"Sound reasoning"},
+    {l:"C", t:"The vendors who say the remedy cures insomnia profit from selling it. So their claim is false, and the remedy does not cure insomnia.", why:"This attacks the source's motives rather than reasoning from a lack of evidence, a different flaw on the same topic.", trap:"scope", trapName:"Different flaw"},
+    {l:"D", t:"Most reviewers who tested the new laptop found its battery life disappointing. So any copy of the laptop a customer buys will have disappointing battery life.", why:"This overgeneralizes from most to all, a different flaw.", trap:"scope", trapName:"Different flaw"},
+    {l:"E", t:"The historian found no record of the treaty in the national archives. Since other reliable sources confirm it was signed, she concluded that the archives are incomplete.", why:"This reasons sensibly from positive evidence that the treaty existed; it does not treat lack of proof as disproof.", trap:"word", trapName:"Sound reasoning"}] },
+
+{ id:"lrc017", kind:"mcq", type:"Parallel flaw", level:5, speaker:null,
+  sents:[
+    {t:"Most of the volunteers at the community garden are retirees, and most of the retirees in this town belong to the historical society.", role:"premise"},
+    {t:"It follows that most of the garden's volunteers belong to the historical society, so an announcement in the society's newsletter would reach most of them.", role:"conclusion"}],
+  stem:"The flawed pattern of reasoning in the argument above is most similar to that in which one of the following?", answer:"B",
+  choices:[
+    {l:"A", t:"All the firm's partners are lawyers, and all its lawyers passed the bar on the first try. So all the partners passed on the first try.", why:"Chaining two 'all' statements is valid, so this argument lacks the stimulus's flaw.", trap:"word", trapName:"Valid argument"},
+    {l:"B", t:"Most north trail hikers carry trekking poles, and most of the region's pole carriers belong to the alpine club. So most north trail hikers are club members, and its newsletter would reach most of them.", why:"Correct. Like the stimulus, it chains two 'most' statements, which does not guarantee overlap, and then draws a practical consequence.", trap:null, trapName:null},
+    {l:"C", t:"Most students in the seminar are history majors, and every history major must take research methods. So most of the seminar's students must take research methods.", why:"Combining 'most' with 'all' is valid: the history majors in the seminar all must take the course. This lacks the flaw.", trap:"word", trapName:"Valid argument"},
+    {l:"D", t:"Most of the museum's donors are artists living in the city. So most artists living in the city must be museum donors, and the museum should thank them.", why:"This reverses a 'most' statement, a different flaw from chaining two 'most' statements.", trap:"word", trapName:"Different flaw"},
+    {l:"E", t:"Most club members prefer the new meeting time, which the members chose by vote. So attendance at club meetings will be higher this year than last year.", why:"This leaps to a prediction about attendance, a different and unrelated gap.", trap:"scope", trapName:"Different flaw"}] },
+
+{ id:"lrc018", kind:"mcq", type:"Parallel flaw", level:5, speaker:null,
+  sents:[
+    {t:"The museum's expenses now exceed its revenue, so it must either raise its admission price or cut its exhibition budget.", role:"middle"},
+    {t:"Raising the price would drive away the families the museum most wants to attract, which the trustees will not accept.", role:"premise"},
+    {t:"So the museum will have to cut its exhibition budget.", role:"conclusion"}],
+  stem:"The flawed pattern of reasoning in the argument above is most similar to that in which one of the following?", answer:"C",
+  choices:[
+    {l:"A", t:"Either the new bike lanes reduced accidents or accidents fell for some other reason. Since accidents also fell in nearby cities without bike lanes, the decline probably had another cause.", why:"Its two alternatives exhaust the possibilities, so it does not infer a false choice from a problem as the stimulus does.", trap:"word", trapName:"Sound reasoning"},
+    {l:"B", t:"If the library extends its hours, it must hire more staff. It will not hire more staff, so it will not extend its hours, despite patrons' requests.", why:"This is valid conditional reasoning, with no unsupported set of options.", trap:"word", trapName:"Valid argument"},
+    {l:"C", t:"The clinic's waits have grown too long, so it must either hire another physician or accept fewer patients. Hiring would strain its budget, which the board forbids. So it must accept fewer patients.", why:"Correct. Like the stimulus, it infers from a problem that only two remedies exist, rules one out, and concludes the other is required.", trap:null, trapName:null},
+    {l:"D", t:"The school can afford new laboratory equipment or a new gym floor, but not both. Since most parents want the floor, the school should buy it and forgo the equipment.", why:"Here the two options are given as a fact rather than inferred from a problem, and the choice rests on popularity, a different pattern.", trap:"ic", trapName:"Different structure"},
+    {l:"E", t:"The bakery's sales have fallen since a competitor opened nearby. So the competitor caused the decline, and the bakery should lower its prices to win customers back.", why:"This infers causation from timing, a different flaw.", trap:"scope", trapName:"Different flaw"}] },
+
+// ===================== PRINCIPLE =====================
+{ id:"lrc019", kind:"mcq", type:"Principle", level:3, speaker:"Council member",
+  sents:[
+    {t:"The city should not renew its contract with the company that collects its recycling.", role:"conclusion"},
+    {t:"Although the company's fees are the lowest in the region, an audit found that it sent nearly a third of the material it collected to landfills, despite assuring residents that all of it was recycled.", role:"premise"}],
+  stem:"Which one of the following principles, if valid, most helps to justify the council member's reasoning?", answer:"D",
+  choices:[
+    {l:"A", t:"A city should always contract with the lowest-cost service provider unless residents formally object to that provider.", why:"This favors the company, whose fees are lowest, and no resident objection is mentioned.", trap:"word", trapName:"Supports the opposite"},
+    {l:"B", t:"A city should audit each of its service contracts at least once before deciding whether to renew it.", why:"This calls for an audit but says nothing about what the audit's findings require, so it does not support non-renewal.", trap:"ic", trapName:"Stops short"},
+    {l:"C", t:"A company that sends recyclable material to landfills should be fined in proportion to the amount it diverts.", why:"This concerns a penalty, not whether the city should renew the contract.", trap:"scope", trapName:"Wrong remedy"},
+    {l:"D", t:"A city should not renew a contract with a provider that has misled residents about how it performs its service, even if its fees are low.", why:"Correct. The company told residents all material was recycled when a third was not, and the principle overrides its low fees.", trap:null, trapName:null},
+    {l:"E", t:"A city should renew a service contract only if the provider performed better than every competing provider in the region.", why:"The stimulus says nothing about how competitors performed, so this condition cannot be applied.", trap:"infer", trapName:"Unsupported condition"}] },
+
+{ id:"lrc020", kind:"mcq", type:"Principle", level:3, speaker:"Columnist",
+  sents:[
+    {t:"Schools should not ban students from bringing phones to class.", role:"conclusion"},
+    {t:"Many students use their phones to manage medical conditions, such as by monitoring blood sugar, and a ban would force these students either to break the rule or to risk their health.", role:"premise"},
+    {t:"Teachers can still require that phones be put away during lessons.", role:"premise"}],
+  stem:"Which one of the following principles, if valid, most helps to justify the columnist's reasoning?", answer:"E",
+  choices:[
+    {l:"A", t:"Students should be permitted to use their phones during lessons whenever they have a legitimate reason to do so.", why:"The columnist accepts that teachers may require phones to be put away during lessons, so this goes beyond and partly conflicts with the argument.", trap:"degree", trapName:"Too broad"},
+    {l:"B", t:"Schools should defer to the wishes of parents in deciding whether students may carry personal devices.", why:"Parents play no role in the argument.", trap:"scope", trapName:"Out of scope"},
+    {l:"C", t:"A school rule that a majority of students would be likely to break should not be adopted.", why:"The columnist says nothing about how many students would break the rule.", trap:"scope", trapName:"Out of scope"},
+    {l:"D", t:"Teachers, rather than school administrators, should decide whether students may bring phones to school.", why:"The argument concerns whether a ban is justified, not who should decide.", trap:"scope", trapName:"Out of scope"},
+    {l:"E", t:"A school rule should not be adopted if obeying it would force some students to risk their health and a less restrictive rule would serve.", why:"Correct. The ban would force some students to risk their health, and requiring phones to be put away is the less restrictive alternative.", trap:null, trapName:null}] },
+
+{ id:"lrc021", kind:"mcq", type:"Principle", level:4, speaker:"Ethicist",
+  sents:[
+    {t:"Mara found a wallet containing a large sum of cash and returned it to its owner, but only because she noticed a security camera and feared being caught if she kept it.", role:"premise"},
+    {t:"Although she did what was right, her action does not deserve praise.", role:"conclusion"}],
+  stem:"Which one of the following principles, if valid, most helps to justify the ethicist's reasoning?", answer:"A",
+  choices:[
+    {l:"A", t:"An action that does what morality requires deserves praise only if the agent did it because it was right, not from fear.", why:"Correct. Mara acted from fear of being caught, so by this principle her right action does not deserve praise.", trap:null, trapName:null},
+    {l:"B", t:"An action deserves praise if it produces good consequences for other people, whatever the agent's motive may have been.", why:"Returning the wallet helped its owner, so this principle would make Mara's action praiseworthy.", trap:"word", trapName:"Supports the opposite"},
+    {l:"C", t:"People who keep property they have found are blameworthy whether or not they are ever caught.", why:"This concerns blame for keeping property, not praise for returning it.", trap:"scope", trapName:"Wrong issue"},
+    {l:"D", t:"An action motivated by fear of punishment is not morally right, even if it benefits other people.", why:"The ethicist concedes Mara did what was right, so this principle contradicts the argument rather than justifying it.", trap:"word", trapName:"Contradicts a premise"},
+    {l:"E", t:"Whether an action deserves praise depends solely on whether it was the right thing to do in the circumstances.", why:"Mara did the right thing, so this principle would make her action praiseworthy.", trap:"word", trapName:"Supports the opposite"}] },
+
+{ id:"lrc022", kind:"mcq", type:"Principle", level:4, speaker:"Economist",
+  sents:[
+    {t:"The government should not subsidize the proposed electric car plant.", role:"conclusion"},
+    {t:"Supporters say the plant will create two thousand jobs, but nearly all of those workers would come from other factories in the region, which would be left with positions they cannot fill.", role:"premise"},
+    {t:"So total employment in the region would barely change.", role:"middle"}],
+  stem:"Which one of the following principles, if valid, most helps to justify the economist's reasoning?", answer:"B",
+  choices:[
+    {l:"A", t:"A government should subsidize industries that are expected to grow rapidly over the coming decades.", why:"This would favor a subsidy for an emerging industry, not oppose it.", trap:"word", trapName:"Supports the opposite"},
+    {l:"B", t:"A government should not subsidize a private enterprise unless the subsidy would substantially increase total employment in the region.", why:"Correct. The economist argues that total employment would barely change, so by this principle the subsidy should not be given.", trap:null, trapName:null},
+    {l:"C", t:"A government should not subsidize a new factory if other factories in the region oppose the subsidy.", why:"Nothing indicates that the other factories oppose the subsidy.", trap:"infer", trapName:"Unsupported condition"},
+    {l:"D", t:"Subsidies to private firms are justified only when the firms could not otherwise afford to begin operating.", why:"The argument says nothing about whether the plant could operate without help.", trap:"infer", trapName:"Unsupported condition"},
+    {l:"E", t:"A government should prefer subsidies that create jobs in regions where unemployment is high.", why:"A preference among subsidies does not establish that this one should be refused.", trap:"degree", trapName:"Too weak"}] },
+
+{ id:"lrc023", kind:"mcq", type:"Principle", level:4, speaker:"Editor",
+  sents:[
+    {t:"The journal should publish Dr. Ferrante's article even though two of its three reviewers recommended rejection.", role:"conclusion"},
+    {t:"Both of those reviewers objected only that the article's conclusions conflict with the field's prevailing theory.", role:"premise"},
+    {t:"The third reviewer, who checked the article's data and methods in detail, found them sound.", role:"premise"}],
+  stem:"Which one of the following principles, if valid, most helps to justify the editor's reasoning?", answer:"C",
+  choices:[
+    {l:"A", t:"A journal should follow the recommendation of the majority of the reviewers who evaluated an article.", why:"The majority recommended rejection, so this principle supports rejecting the article.", trap:"word", trapName:"Supports the opposite"},
+    {l:"B", t:"An article whose conclusions conflict with prevailing theory deserves more scrutiny than one whose conclusions do not.", why:"Calling for more scrutiny does not justify publishing; if anything it supports caution.", trap:"word", trapName:"Wrong direction"},
+    {l:"C", t:"Whether a journal publishes an article should depend on the soundness of its data and methods, not on agreement with prevailing theory.", why:"Correct. The only objections concerned conflict with theory, and the data and methods were found sound, so the article should be published.", trap:null, trapName:null},
+    {l:"D", t:"Reviewers who object to an article's conclusions should be replaced by reviewers who have no stake in prevailing theory.", why:"This concerns choosing reviewers, not whether this article should be published.", trap:"scope", trapName:"Wrong issue"},
+    {l:"E", t:"A reviewer who has not personally checked an article's data should not be allowed to recommend its rejection.", why:"The editor never says the two reviewers failed to check the data, and the principle would not by itself require publication.", trap:"infer", trapName:"Unsupported condition"}] },
+
+{ id:"lrc024", kind:"mcq", type:"Principle", level:5, speaker:"Legal scholar",
+  sents:[
+    {t:"A tenant who withholds rent because the landlord has failed to make repairs should not be evicted for nonpayment if the tenant deposited the withheld rent with the court while the dispute was pending.", role:"conclusion"},
+    {t:"The deposit shows that the tenant was willing and able to pay and was using the only leverage available to compel the repairs.", role:"premise"}],
+  stem:"Which one of the following principles, if valid, most helps to justify the legal scholar's reasoning?", answer:"D",
+  choices:[
+    {l:"A", t:"Tenants who are unable to pay their rent should be given additional time before eviction proceedings begin.", why:"The tenant described was able to pay, so this principle does not apply.", trap:"scope", trapName:"Wrong case"},
+    {l:"B", t:"A person who withholds a payment to compel performance should be required to deposit that payment with a neutral party.", why:"This says what the tenant must do but not that doing it protects the tenant from eviction.", trap:"ic", trapName:"Stops short"},
+    {l:"C", t:"Courts should resolve disputes between landlords and tenants quickly so that neither side can use delay as leverage.", why:"The scholar treats the tenant's leverage as legitimate; this principle says nothing about eviction for nonpayment.", trap:"scope", trapName:"Out of scope"},
+    {l:"D", t:"A party who withholds payment to compel the other party to perform should not be penalized if it has shown it was willing and able to pay.", why:"Correct. The deposit shows willingness and ability to pay, and the rent was withheld to compel repairs, so eviction should not follow.", trap:null, trapName:null},
+    {l:"E", t:"A tenant who withholds rent should not be evicted if the needed repairs were essential to the tenant's health or safety.", why:"The scholar never says the repairs concerned health or safety, and the argument rests on the deposit instead.", trap:"infer", trapName:"Unsupported condition"}] }
+];
+
+const RC_CAL = [
+{ id:"rcc1", title:"Legal fictions", comparative:false,
+paras:[
+"Legal historians have long been embarrassed by legal fictions, the assertions that courts knowingly treat as true although everyone involved knows them to be false. In one well-known line of English cases, a merchant could sue in a local court over a contract made in a distant port because the court allowed him to allege that the port lay within a parish of the city, an allegation the defendant was not permitted to contest. To the legal reformers of the nineteenth century, such devices were simply lies told by judges, and their prevalence showed how far the common law had drifted from candor. A rational legal system, the reformers insisted, would state its rules openly and change them by legislation, not by pretending that the facts were other than they were. Several jurisdictions eventually abolished such pleading devices by statute, and the reformers counted each abolition as a victory for honesty. Some went further and argued that fictions allowed judges to exercise power while disclaiming responsibility for its use.",
+"This indictment, though not baseless, misunderstands what fictions actually did. A court that wished to extend a remedy to a new class of cases faced a dilemma. It could declare openly that the old limits no longer applied, but in a system that derived its authority from continuity with the past, such a declaration would invite the charge that judges were usurping the role of the legislature. Or it could leave the old limits in place and deny relief to litigants whose claims were plainly just. The fiction offered a third course. By pretending that the new case fit within the old category, the court could reach the just result while leaving the category's formal boundaries untouched. Nobody was deceived; every lawyer in the courtroom knew perfectly well that the port was not in the parish. The fiction was less a lie than a kind of scaffolding, a temporary structure that allowed the law to be rebuilt while it remained in use.",
+"Scaffolding, however, is meant to come down, and the reformers' complaint has its greatest force where fictions were never dismantled. A fiction that has done its work should eventually give way to an explicit rule stating what courts are in fact doing, so that the rule can be examined, criticized, and if necessary limited. When a fiction instead calcifies, later generations come to reason from it as though it were literally true, and conclusions that would never survive open scrutiny are drawn from a premise everyone once understood to be false. The proper lesson of this history, then, is neither that fictions are disreputable nor that they are harmless. It is that a legal system may legitimately borrow against the authority of its past in order to accomplish necessary change, but that the debt must eventually be repaid in the currency of candid reasons, and a system that never repays it will find its doctrine resting on foundations no one would choose to defend. Reformers who demanded that every fiction be abolished at once overlooked this distinction, and so did those who defended every fiction as harmless."
+],
+qs:[
+{id:"rcc1q1", level:3, type:"Main point", stem:"Which one of the following most accurately expresses the main point of the passage?", answer:"C", choices:[
+{l:"A", t:"Legal fictions were lies told by judges, and their prevalence shows that the common law had abandoned candor.", why:"This is the reformers' view, which the author says misunderstands what fictions did.", trap:"pc", trapName:"Another's view"},
+{l:"B", t:"Legal fictions should be abolished wherever they still exist and replaced by legislation.", why:"The author favors replacing spent fictions with explicit rules, not necessarily legislation, and defends their past use.", trap:"degree", trapName:"Too strong"},
+{l:"C", t:"Legal fictions served legitimately as temporary devices for legal change, but they become harmful when not eventually replaced by explicit rules.", why:"Correct. Paragraph 2 defends fictions as scaffolding, and paragraph 3 insists they must give way to candid rules.", trap:null, trapName:null},
+{l:"D", t:"Courts that used fictions to extend remedies were motivated chiefly by a desire to avoid accountability for their decisions.", why:"Some reformers argued this, but the author attributes the fictions to a genuine dilemma, not evasion.", trap:"pc", trapName:"Another's view"},
+{l:"E", t:"No lawyer was ever deceived by a legal fiction, so fictions posed no danger to the integrity of the law.", why:"The author says nobody was deceived at the time but warns that calcified fictions mislead later generations.", trap:"degree", trapName:"Overstates a detail"}]},
+{id:"rcc1q2", level:3, type:"Primary purpose", stem:"The primary purpose of the passage is to", answer:"A", choices:[
+{l:"A", t:"qualify a traditional criticism of a legal practice by explaining the practice's function and identifying when the criticism applies", why:"Correct. The author says the reformers' indictment is 'not baseless' but misunderstands fictions, explains their function, and locates where the complaint has force.", trap:null, trapName:null},
+{l:"B", t:"defend a legal practice against all of the objections that have been raised against it by its critics", why:"The author concedes that the reformers' complaint has force where fictions calcify.", trap:"degree", trapName:"Too strong"},
+{l:"C", t:"trace the historical development of a legal practice from its origins in English courts to the present day", why:"The passage offers an analysis, not a chronological history, and says nothing of the present day.", trap:"scope", trapName:"Wrong purpose"},
+{l:"D", t:"argue that legislatures rather than courts should be responsible for changing legal rules", why:"This is the reformers' view; the author defends judicial use of fictions in some circumstances.", trap:"pc", trapName:"Another's view"},
+{l:"E", t:"compare the merits of two competing theories about why courts adopted legal fictions", why:"The passage does not weigh two theories of origin; it evaluates a criticism of the practice.", trap:"scope", trapName:"Wrong structure"}]},
+{id:"rcc1q3", level:4, type:"Author's attitude", stem:"The author's attitude toward the nineteenth-century reformers' view of legal fictions is best described as", answer:"E", choices:[
+{l:"A", t:"wholehearted agreement with their conclusion but rejection of their reasoning", why:"The author rejects their conclusion that fictions were simply lies.", trap:"word", trapName:"Reverses the view"},
+{l:"B", t:"dismissive contempt for a view grounded in ignorance of legal practice", why:"The author calls their indictment 'not baseless' and grants it force in some cases, which is far from contempt.", trap:"degree", trapName:"Too negative"},
+{l:"C", t:"neutral detachment, with no judgment offered about the view's merits", why:"The author explicitly judges the view, saying it misunderstands what fictions did.", trap:"degree", trapName:"Too neutral"},
+{l:"D", t:"reluctant acceptance of the view after initial skepticism", why:"The author never accepts the reformers' central claim; the structure moves from criticism to qualification, not to acceptance.", trap:"word", trapName:"Misreads structure"},
+{l:"E", t:"partial disagreement, combined with recognition that their complaint is valid in certain cases", why:"Correct. The author says the indictment misunderstands fictions but has its greatest force where fictions were never dismantled.", trap:null, trapName:null}]},
+{id:"rcc1q4", level:4, type:"Function of a detail", stem:"The author mentions the merchant's allegation that a distant port lay within a parish of the city primarily in order to", answer:"B", choices:[
+{l:"A", t:"show that courts sometimes deceived defendants about the facts of their cases", why:"The author stresses that nobody was deceived; every lawyer knew the port was not in the parish.", trap:"word", trapName:"Contradicts passage"},
+{l:"B", t:"provide a concrete instance of an assertion that a court treated as true while knowing it to be false", why:"Correct. The example follows the definition of legal fictions in the first paragraph and is recalled in paragraph 2 to show that no one was deceived.", trap:null, trapName:null},
+{l:"C", t:"illustrate how a fiction can calcify until later courts reason from it as literally true", why:"The port example is never described as having calcified; calcification is discussed abstractly in paragraph 3.", trap:"scope", trapName:"Wrong paragraph"},
+{l:"D", t:"demonstrate that English courts were more willing than other courts to use fictions", why:"No comparison with other courts appears in the passage.", trap:"scope", trapName:"Out of scope"},
+{l:"E", t:"support the reformers' claim that fictions let judges exercise power while disclaiming responsibility", why:"The example is introduced to define fictions, not to support that further charge, which the author does not endorse.", trap:"pc", trapName:"Another's view"}]},
+{id:"rcc1q5", level:4, type:"Author would agree", stem:"The author would be most likely to agree with which one of the following statements?", answer:"D", choices:[
+{l:"A", t:"A court should never extend a remedy to a new class of cases without explicit authorization from the legislature.", why:"The author defends courts that extended remedies through fictions.", trap:"word", trapName:"Contradicts author"},
+{l:"B", t:"Legal fictions are harmless as long as the lawyers who use them understand that they are false.", why:"The author says the lesson is not that fictions are harmless, since later generations may forget their falsity.", trap:"word", trapName:"Contradicts author"},
+{l:"C", t:"A legal system's authority depends primarily on the justice of its outcomes rather than on continuity with the past.", why:"The author describes the common law as deriving authority from continuity and never ranks justice above it.", trap:"infer", trapName:"Unsupported"},
+{l:"D", t:"A rule stating openly what courts are doing is preferable, once a change is established, to a fiction that conceals it.", why:"Correct. Paragraph 3 says a fiction that has done its work should give way to an explicit rule that can be examined and criticized.", trap:null, trapName:null},
+{l:"E", t:"Most legal fictions still in use today have calcified into doctrines that cannot be defended.", why:"The author warns of calcification but makes no claim about how many current fictions have calcified.", trap:"degree", trapName:"Too strong"}]},
+{id:"rcc1q6", level:4, type:"Meaning in context", stem:"As used in the third paragraph, the word 'calcifies' most nearly means", answer:"A", choices:[
+{l:"A", t:"hardens into a fixed part of the law that is no longer recognized as a device", why:"Correct. The passage says later generations of a calcified fiction 'reason from it as though it were literally true'.", trap:null, trapName:null},
+{l:"B", t:"is formally repealed by a legislature after long debate", why:"Calcification is the opposite of being dismantled or repealed.", trap:"word", trapName:"Reverses meaning"},
+{l:"C", t:"becomes so widely ridiculed that courts stop using it", why:"The passage describes the fiction being taken more seriously, not ridiculed.", trap:"word", trapName:"Reverses meaning"},
+{l:"D", t:"grows gradually more complicated as courts add exceptions to it", why:"Nothing in the passage mentions added exceptions.", trap:"infer", trapName:"Unsupported"},
+{l:"E", t:"is replaced by an explicit rule stating what courts are doing", why:"This is what the author says should happen instead of calcification.", trap:"word", trapName:"Reverses meaning"}]},
+{id:"rcc1q7", level:5, type:"Analogy", stem:"Which one of the following is most analogous to the role that, according to the author, legal fictions properly play?", answer:"E", choices:[
+{l:"A", t:"A company issues a misleading statement about its finances to calm investors, hoping its fortunes will improve before the truth emerges.", why:"This involves genuine deception, whereas the author stresses that fictions deceived no one.", trap:"word", trapName:"Misses key feature"},
+{l:"B", t:"A school permanently renames an old building after a donor, and students soon forget the building's original name.", why:"This lacks both the knowing pretense and the change accomplished under cover of continuity.", trap:"scope", trapName:"Surface similarity"},
+{l:"C", t:"A club amends its bylaws openly by a vote of its members after a debate about whether the change is wise.", why:"This is the open change the reformers favored, not the transitional pretense the author defends.", trap:"pc", trapName:"Reformers' model"},
+{l:"D", t:"A city keeps an obsolete ordinance on its books for decades without enforcing it or ever formally repealing it.", why:"This resembles a rule left in place, but involves no pretense used to achieve change.", trap:"ic", trapName:"Partial match"},
+{l:"E", t:"A town that has transformed its old harvest festival keeps the festival's name, while everyone knows its activities are new, and later adopts a new name.", why:"Correct. Like a proper fiction, the old name provides continuity while change occurs, deceives no one, and is eventually replaced openly.", trap:null, trapName:null}]}
+]},
+
+{ id:"rcc2", title:"Assisted migration", comparative:true,
+paras:[
+"Passage A: As the climate warms, many species will need to move toward the poles or upslope to survive, and some cannot move fast enough on their own. A salamander confined to a few cool mountain streams, for example, cannot cross the warm, dry valleys that separate its range from the higher ranges to the north. Its streams are warming, and surveys suggest that its numbers have already fallen in the lowest of them. For such species, conservationists have proposed assisted migration: deliberately moving populations to places where the climate will suit them in the coming decades.",
+"Critics warn that a species moved beyond its native range might become invasive, but this concern is overstated. Humans already move species across great distances for practical ends. Foresters, for instance, now routinely plant seedlings grown from southern seed sources in northern plots, expecting those trees to suit the warmer climate to come, and these plantings have not produced ecological disasters. Moreover, the species most in need of help tend to be those with narrow habitat requirements and poor dispersal, which are precisely the traits that make a species unlikely to spread aggressively.",
+"The alternative to acting is not a safe status quo. A species whose habitat is disappearing will simply vanish while we wait for certainty that will never arrive. Each decade of delay narrows the set of places to which a species could still be moved, and populations that dwindle further become harder to establish elsewhere. Assisted migration should therefore become a standard tool of conservation, used wherever a species' survival depends on it.",
+"Passage B: Proponents of assisted migration are right that some species face a grim future in their present ranges, and it would be callous to dismiss their plight. But the case for moving them rests on a confidence about ecological outcomes that the record does not support. The question is not whether to care about such species but how much we actually know about the consequences of moving them.",
+"Defenders of the practice often point to the long history of translocations undertaken for commercial ends, such as the stocking of lakes with game fish or the transfer of tree seed for timber. Yet these transfers were monitored, when they were monitored at all, for growth and yield rather than for their effects on surrounding communities. The absence of documented harm in such cases often reflects an absence of looking. Even the transfers of tree seed that proponents regard as benign have rarely been studied for their effects on the insects, fungi, and birds that depend on native trees. Where ecologists have looked closely, the results are sobering: trout stocked in formerly fishless mountain lakes, for example, have eliminated native frogs and insects across entire watersheds. A moved species need not spread aggressively to do damage. It may carry pathogens to which the recipient community has no resistance, hybridize with a closely related native species, or prey on organisms that evolved without such a predator. None of these effects depends on the dispersal ability that proponents treat as the main source of risk.",
+"None of this means that assisted migration must be ruled out. It means that it should be treated as an experiment rather than a routine practice. Small, carefully monitored releases, chosen where the recipient community is well studied and where failure could be reversed, would let us learn what our predictions are worth before we stake entire ecosystems on them. Such trials would also reveal which predictions fail, and why, so that later decisions could rest on evidence about assisted migration itself rather than on analogies to practices pursued for other purposes. If a species is lost while such trials proceed, that loss is real and grievous. But a policy that moves species wholesale on the strength of commercial precedents could cost us not one species but several, and some of those losses would fall on communities that were never at risk from climate change at all."
+],
+qs:[
+{id:"rcc2q1", level:3, type:"Central question", stem:"Which one of the following questions is central to both passages?", answer:"B", choices:[
+{l:"A", t:"Which species are most threatened by changes in climate?", why:"Both mention threatened species, but neither is centrally concerned with ranking them.", trap:"scope", trapName:"Peripheral"},
+{l:"B", t:"Should species threatened by a warming climate be moved to new ranges as a routine conservation measure?", why:"Correct. A argues the practice should become a standard tool; B argues it should be treated as an experiment rather than routine.", trap:null, trapName:null},
+{l:"C", t:"How should stocked game fish be removed from formerly fishless mountain lakes?", why:"Only B mentions stocked trout, and neither passage discusses removing them.", trap:"scope", trapName:"One passage only"},
+{l:"D", t:"Why do some species disperse poorly across warm, dry valleys?", why:"A mentions a salamander that cannot cross valleys but does not explain why, and B does not address it.", trap:"scope", trapName:"Detail only"},
+{l:"E", t:"Has the timber industry managed its forests responsibly in recent decades?", why:"Forestry appears only as a precedent; neither passage evaluates the industry's management.", trap:"scope", trapName:"Out of scope"}]},
+{id:"rcc2q2", level:3, type:"Mentioned in B not A", stem:"Which one of the following is mentioned in passage B but not in passage A?", answer:"D", choices:[
+{l:"A", t:"the transfer of tree seed to suit a changing climate or timber production", why:"Both passages mention moving tree seed: A as foresters' plantings, B as transfer of tree seed for timber.", trap:"pc", trapName:"In both"},
+{l:"B", t:"the possibility that a moved species might become invasive", why:"A raises this as the critics' warning, and B addresses risk as well.", trap:"pc", trapName:"In both"},
+{l:"C", t:"species with poor ability to disperse on their own", why:"A discusses poor dispersal explicitly, and B refers to it as well.", trap:"pc", trapName:"In both"},
+{l:"D", t:"the transmission of disease to a community that has no resistance to it", why:"Correct. B says a moved species may carry pathogens to which the recipient community has no resistance; A never mentions disease.", trap:null, trapName:null},
+{l:"E", t:"the claim that waiting for certainty may allow a species to vanish", why:"This claim is made in passage A, so it is not mentioned only in passage B.", trap:"word", trapName:"In A"}]},
+{id:"rcc2q3", level:4, type:"Disagreement", stem:"The authors of the two passages would be most likely to disagree over whether", answer:"E", choices:[
+{l:"A", t:"some species will be unable to survive in their present ranges as the climate warms", why:"Both accept this: B says proponents are right that some species face a grim future.", trap:"infer", trapName:"Both agree"},
+{l:"B", t:"assisted migration should be ruled out entirely as a conservation measure", why:"Neither author would rule it out; B explicitly says it need not be ruled out.", trap:"infer", trapName:"Both agree"},
+{l:"C", t:"the loss of a species while conservationists wait would be a real loss", why:"Both treat such a loss as real; B calls it 'real and grievous'.", trap:"infer", trapName:"Both agree"},
+{l:"D", t:"trout stocked in mountain lakes have eliminated native frogs and insects", why:"Only B mentions this, and nothing in A disputes it.", trap:"scope", trapName:"One passage only"},
+{l:"E", t:"the record of commercial translocations shows that moving species poses little ecological risk", why:"Correct. A cites forestry plantings to show the invasiveness concern is overstated; B says such records reflect an absence of looking.", trap:null, trapName:null}]},
+{id:"rcc2q4", level:4, type:"Instance across passages", stem:"Which one of the following items mentioned in passage A is an instance of what passage B refers to as 'translocations undertaken for commercial ends'?", answer:"C", choices:[
+{l:"A", t:"the movement of a mountain salamander to higher ranges to the north", why:"This is a proposed conservation move, not a commercial one.", trap:"word", trapName:"Wrong category"},
+{l:"B", t:"the poleward and upslope movement of species as the climate warms", why:"This is movement by species on their own, not a human translocation.", trap:"word", trapName:"Wrong category"},
+{l:"C", t:"foresters' planting of seedlings grown from southern seed sources in northern plots", why:"Correct. B lists 'the transfer of tree seed for timber' among commercial translocations, and A's forestry plantings are such transfers.", trap:null, trapName:null},
+{l:"D", t:"the deliberate moving of populations to places whose future climate will suit them", why:"This is A's definition of assisted migration, which is a conservation measure, not commercial.", trap:"pc", trapName:"Wrong category"},
+{l:"E", t:"the spread of species with broad habitat requirements and strong dispersal", why:"A mentions these traits only to contrast them with needy species; no translocation is involved.", trap:"scope", trapName:"Not a translocation"}]},
+{id:"rcc2q5", level:4, type:"Criticism of other author", stem:"The author of passage B would be most likely to criticize the argument in passage A on the grounds that it", answer:"A", choices:[
+{l:"A", t:"treats the lack of reported harm from forestry plantings as evidence of safety, though such plantings were not monitored for ecological effects", why:"Correct. B says commercial transfers were monitored for growth and yield, so the absence of documented harm 'reflects an absence of looking'.", trap:null, trapName:null},
+{l:"B", t:"exaggerates the degree to which some species are threatened by warming temperatures", why:"B agrees that proponents are right about the grim future some species face.", trap:"word", trapName:"B agrees"},
+{l:"C", t:"fails to consider that some species might be moved to new ranges without human help", why:"A explicitly notes that many species will move on their own; B raises no such point.", trap:"scope", trapName:"Not B's concern"},
+{l:"D", t:"relies on a definition of assisted migration that is too narrow to include commercial transfers", why:"B distinguishes commercial transfers from assisted migration rather than wanting them included in its definition.", trap:"scope", trapName:"Not B's concern"},
+{l:"E", t:"overlooks the possibility that the salamander could survive by moving downslope", why:"Neither passage suggests downslope movement, and B does not discuss the salamander.", trap:"scope", trapName:"Out of scope"}]},
+{id:"rcc2q6", level:5, type:"Analogous documents", stem:"The relationship between passage A and passage B is most analogous to the relationship between which one of the following pairs of documents?", answer:"D", choices:[
+{l:"A", t:"a report describing a medical breakthrough, and a second report confirming the breakthrough with new data", why:"B does not confirm A; it challenges A's evidence and recommendation.", trap:"word", trapName:"Agreement, not challenge"},
+{l:"B", t:"a petition calling for a ban on a new medical treatment, and a letter defending the treatment against the ban", why:"This reverses the roles: A advocates the practice and B urges caution.", trap:"word", trapName:"Reverses roles"},
+{l:"C", t:"an article arguing that a treatment is useless, and a reply arguing that it should be adopted immediately", why:"This also reverses the roles, and B never calls for immediate adoption.", trap:"word", trapName:"Reverses roles"},
+{l:"D", t:"a proposal to adopt a treatment as standard care, and a response that grants the need but urges limited trials because the proposal's evidence is weak", why:"Correct. A urges routine use; B concedes species are threatened but calls for small monitored experiments because A's precedents are unreliable.", trap:null, trapName:null},
+{l:"E", t:"a history of a treatment's development, and a biography of the physician who invented it", why:"Neither passage is a history; both are arguments about policy.", trap:"scope", trapName:"Wrong genre"}]},
+{id:"rcc2q7", level:5, type:"Relationship of arguments", stem:"Which one of the following most accurately describes the relationship between the argument in passage B and the argument in passage A?", answer:"B", choices:[
+{l:"A", t:"Passage B rejects passage A's claim that some species cannot move fast enough on their own, and so rejects A's conclusion.", why:"B accepts that some species face a grim future; its challenge targets A's evidence about risk.", trap:"word", trapName:"Misplaces the dispute"},
+{l:"B", t:"Passage B accepts the problem that motivates passage A but argues that A's evidence about risk is unreliable and that A's main reason for low risk overlooks other kinds of harm.", why:"Correct. B concedes the plight of threatened species, attacks the commercial precedents, and says harm need not depend on dispersal ability.", trap:null, trapName:null},
+{l:"C", t:"Passage B offers additional evidence that supports passage A's conclusion while disputing one minor detail of A's reasoning.", why:"B rejects A's conclusion that the practice should become routine, so it does not support it.", trap:"word", trapName:"Wrong direction"},
+{l:"D", t:"Passage B agrees with passage A's conclusion but argues that it should be reached on entirely different grounds.", why:"B disagrees with A's conclusion, recommending experiments rather than routine use.", trap:"word", trapName:"Wrong direction"},
+{l:"E", t:"Passage B argues that the risks passage A describes are real but that they are outweighed by the benefits A overlooks.", why:"B argues the risks are greater than A admits, not that benefits outweigh them.", trap:"word", trapName:"Reverses the logic"}]}
+]}
+];
+
 /* =========================================================
    VOCABULARY ENGINE (permanent module)
    ========================================================= */
@@ -16166,14 +16607,14 @@ vWords = function(){ const tab = U.vtab||"today"; const c = vCounts(); const har
 
 /* ---------- 3. advanced LR + RC banks ---------- */
 const LR_ITEMS = [], RC_ITEMS = [];
-const LRT_ID = {"Necessary assumption":"nec","Sufficient assumption":"suff","Strengthen":"str","Weaken":"weak","Flaw":"flaw","Conditional reasoning":"cond","Must be true":"mbt","Most strongly supported":"mss","Resolve the paradox":"para","Method of reasoning":"method","Role of a statement":"role","Principle":"prin","Parallel reasoning":"par","Causal reasoning":"cause"};
+const LRT_ID = {"Necessary assumption":"nec","Sufficient assumption":"suff","Strengthen":"str","Weaken":"weak","Flaw":"flaw","Conditional reasoning":"cond","Must be true":"mbt","Most strongly supported":"mss","Resolve the paradox":"para","Method of reasoning":"method","Role of a statement":"role","Principle":"prin","Parallel reasoning":"par","Causal reasoning":"cause","Point at issue":"pai","Parallel flaw":"par"};
 (function buildLR(){
   const A = n => { try{ return eval(n); }catch(e){ return []; } };
-  A("LR_BANK1").concat(A("LR_BANK2")).forEach(x=>{ if(Q(x.id)) return;
+  A("LR_BANK1").concat(A("LR_BANK2"), A("LR_CAL")).forEach(x=>{ if(Q(x.id)) return;
     QUESTIONS.push({id:x.id, mode:"lr", difficulty:x.level>=5?"LSAT-level":"Harder", type:x.type, speaker:x.speaker, sents:x.sents.map(s=>({t:s.t, role:s.role==="premise"?"evidence":s.role, note:""})), stem:x.stem, stemPlain:x.stem, answer:x.answer,
       choices:x.choices.map(c=>({l:c.l, t:c.t, why:c.why, trap:c.trapName||c.trap||null, code:c.trap||null, pick:""})), hints:[], explain:{normal:x.choices.find(c=>c.l===x.answer).why}});
     const it = {uid:"lr:"+x.id, skill:"lr-"+(LRT_ID[x.type]||"mix"), lrType:x.type, level:x.level, kind:"mcq", qid:x.id, lr:true, asSents:x.sents}; LR_ITEMS.push(it); S1_BY[it.uid] = it; });
-  A("RC_SETS").forEach(set=>{ set.qs.forEach((x,k)=>{ if(Q(x.id)) return;
+  A("RC_SETS").concat(A("RC_CAL")).forEach(set=>{ set.qs.forEach((x,k)=>{ if(Q(x.id)) return;
     QUESTIONS.push({id:x.id, mode:"rc", difficulty:"Harder", type:x.type, speaker:null, sents:set.paras.map(p=>({t:p, role:"background", note:""})), stem:x.stem, stemPlain:x.stem, answer:x.answer, choices:x.choices.map(c=>({l:c.l, t:c.t, why:c.why, trap:c.trapName||c.trap||null, code:c.trap||null, pick:""})), hints:[], explain:{normal:x.choices.find(c=>c.l===x.answer).why}});
     const it = {uid:"rc:"+x.id, skill:"rc", rcType:x.type, level:x.level, kind:"mcq", qid:x.id, rc:true, set:set.id, setTitle:set.title, paras:set.paras, comparative:!!set.comparative, order:k}; RC_ITEMS.push(it); S1_BY[it.uid] = it; }); });
 })();
@@ -16326,6 +16767,86 @@ mergeState = function(o){ _mergeStateD(o);
 .rcpass p{margin:0 0 10px}.calgrid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;text-align:center}.calday{border:1px solid var(--line);border-radius:6px;background:var(--surface);padding:6px 0;font:inherit;color:inherit;cursor:pointer;display:flex;flex-direction:column;align-items:center;font-size:.85rem}.calday span{font-size:.7rem;color:var(--muted)}.calday.has{background:var(--good-soft);border-color:var(--good)}.calday.sel{outline:2px solid var(--accent)}`; document.head.appendChild(st); })();
 document.addEventListener("input", e=>{ if(e.target.id==="vlib-q"){ U.vlibQ = e.target.value; const el = document.getElementById("vlib-list"); if(el) el.innerHTML = vLibList(); } });
 document.addEventListener("change", e=>{ const a = e.target.dataset && e.target.dataset.act; if(a==="vlib-g"){ U.vlibG = e.target.value; render(); } if(a==="vlib-t"){ U.vlibT = e.target.value; render(); } if(a==="vlib-s"){ U.vlibS = e.target.value; render(); } });
+
+/* =========================================================
+   OFFICIAL MATERIALS: resource library, LSAC sample blueprint,
+   official-sample answer log, calibration against Bridge banks
+   ========================================================= */
+const LSAC_LR_URL = "https://www.lsac.org/lsat/taking-lsat/test-format/logical-reasoning/logical-reasoning-sample-questions";
+const LSAC_RC_URL = "https://www.lsac.org/lsat/taking-lsat/test-format/reading-comprehension/reading-comprehension-sample-questions";
+/* Structure only, measured from LSAC's public sample pages (Oct 24, 2026). No LSAC text is reproduced; do the questions on LSAC's site. */
+const OFF_LR = [
+  {n:1, type:"Point at issue", diff:"Medium", key:"D", stim:55, ch:10, how:"Two speakers: find the exact claim one asserts and the other denies. Wrong choices are things both accept or that one never addresses."},
+  {n:2, type:"Method of reasoning", diff:"Easy", key:"D", stim:65, ch:16, how:"Describe the move: results from one comparable case are used to infer the other. Wrong choices misread the time frame or call it statistical."},
+  {n:3, type:"Must be true / inference", diff:"Medium", key:"E", stim:140, ch:19, how:"Combine the stated facts; take only what they guarantee. Wrong choices stretch scope, add causation, or treat one remedy as the only one."},
+  {n:4, type:"Strengthen", diff:"Difficult", key:"B", stim:75, ch:15, how:"Find the gap in the explanation and close it. Wrong choices are irrelevant, support the rival view, or concern a different group."},
+  {n:5, type:"Flaw", diff:"Difficult", key:"D", stim:65, ch:17, how:"Neither necessary nor sufficient does not mean irrelevant: a factor can still promote an outcome. Wrong choices misstate the argument."},
+  {n:6, type:"Principle (justify)", diff:"Easy", key:"C", stim:90, ch:17, how:"Match the principle to the conclusion, not to the premises. Wrong choices support the opposing side or a different comparison."},
+  {n:7, type:"Sufficient assumption", diff:"Difficult", key:"C", stim:55, ch:19, how:"Supply the missing link that makes the conclusion follow with certainty. Wrong choices repeat known facts or are irrelevant."},
+  {n:8, type:"Necessary assumption", diff:"Medium", key:"E", stim:50, ch:13, how:"Ask what must be true for the evidence to count (negate each choice). The most popular wrong answer was irrelevant detail."},
+  {n:9, type:"Resolve the paradox", diff:"Difficult", key:"C", stim:60, ch:19, how:"Explain why both facts can be true together (a selection effect). The most popular wrong answer explained only part of it."},
+  {n:10, type:"Parallel flaw", diff:"Very difficult", key:"D", stim:35, ch:27, how:"Abstract the flawed pattern (most As are Bs, so this B is likely an A) and match it. Wrong choices are valid or have a different flaw."}
+];
+const OFF_RC = [
+  {n:1, set:"Passage 1 · art history (~550 words, 3 paragraphs)", type:"Author's attitude", diff:"Medium", key:"E"},
+  {n:2, set:"Passage 1", type:"Function of a listed detail", diff:"Easy", key:"A"},
+  {n:3, set:"Passage 1", type:"Primary purpose", diff:"Easy", key:"B"},
+  {n:4, set:"Passage 2 · law (~500 words, 3 paragraphs)", type:"Main point", diff:"Easy", key:"C"},
+  {n:5, set:"Passage 2", type:"Author would most likely assent to", diff:"Difficult", key:"B"},
+  {n:6, set:"Passage 3 · economics (~500 words, 3 paragraphs)", type:"Phrase in context", diff:"Difficult", key:"D"},
+  {n:7, set:"Passage 3", type:"Analogy", diff:"Difficult", key:"D"},
+  {n:8, set:"Comparative pair · environmental science (~260 + ~400 words)", type:"Question central to both", diff:"Not stated", key:"B"},
+  {n:9, set:"Comparative pair", type:"In passage B but not A", diff:"Not stated", key:"A"},
+  {n:10, set:"Comparative pair", type:"Point of disagreement", diff:"Not stated", key:"D"},
+  {n:11, set:"Comparative pair", type:"Instance of evidence referred to", diff:"Not stated", key:"A"},
+  {n:12, set:"Comparative pair", type:"Criticism one author would make", diff:"Not stated", key:"D"},
+  {n:13, set:"Comparative pair", type:"Analogous relationship between documents", diff:"Not stated", key:"C"},
+  {n:14, set:"Comparative pair", type:"Relationship between the arguments", diff:"Not stated", key:"C"}
+];
+const OFF_RULES = ["Choose the BEST answer: the one that most accurately and completely answers the question. More than one may look defensible.", "Do not make assumptions that are implausible, superfluous, or incompatible with the passage.", "Difficulty labels reflect how many real test takers answered correctly.", "RC answers come from what the passage states or implies, never outside knowledge."];
+const RESOURCES = [
+  {name:"LSAC Logical Reasoning sample questions", who:"LSAC (official)", cost:"Free", use:"10 official LR questions with explanations and difficulty labels. Use for calibration now.", bridge:"Log your answers in “Official samples” below.", url:LSAC_LR_URL, official:true},
+  {name:"LSAC Reading Comprehension sample questions", who:"LSAC (official)", cost:"Free", use:"4 sets, 14 official RC questions incl. a comparative pair.", bridge:"Log your answers in “Official samples” below.", url:LSAC_RC_URL, official:true},
+  {name:"LawHub (free account)", who:"LSAC (official)", cost:"Free", use:"Full official PrepTests in the real test interface (reported: PrepTests 140, 141, 157, 158). Self-paced or timed exam mode.", bridge:"Take one as a baseline; log the score in My year.", url:"https://www.lsac.org/lawhub", official:true},
+  {name:"LawHub Advantage", who:"LSAC (official)", cost:"About $124/year (LSAT Demon FAQ; older guides list $115). Free with an LSAC fee waiver.", use:"The full official PrepTest library for 12 months. No answer explanations.", bridge:"Saturday timed sections and full tests once foundations are stable; log every score in My year.", url:"https://www.lsac.org/lawhub", official:true},
+  {name:"Official LSAT SuperPrep / SuperPrep II / TriplePrep books", who:"LSAC (official)", cost:"Varies (print)", use:"Older official PrepTests; SuperPrep includes explanations.", bridge:"Use LR and RC sections only. Skip Logic Games, which are no longer tested.", url:"https://www.manhattanreview.com/lsat-official-guides/", official:true},
+  {name:"LSAT Demon", who:"Third-party course", cost:"Essential / Live / Pro plans (see their plans page). Official questions need LawHub Advantage.", use:"Official-question drilling with explanations, lessons, live classes, tutoring on Pro.", bridge:"Optional: pair Demon explanations with your Bridge error journal.", url:"https://lsatdemon.com/resources/frequently-asked-questions/lsat-demon-plans-explained", official:false},
+  {name:"7Sage question explanations", who:"Third-party", cost:"Free explanations index; paid course", use:"Explanations for official PrepTest questions you take on LawHub.", bridge:"Look up any official question you miss, then tag the mistake in Bridge.", url:"https://7sage.com/practice/explanations", official:false},
+  {name:"LSAT Hacks explanations", who:"Third-party", cost:"Free online explanations", use:"Written explanations of official PrepTest questions.", bridge:"Second opinion on official questions you miss.", url:"https://lsathacks.com/explanations/", official:false},
+  {name:"Khan Academy LSAT content (moved)", who:"LSAC", cost:"Free", use:"Khan Academy’s official LSAT prep ended in 2024; LSAC moved those resources into LawHub.", bridge:"Use LawHub instead.", url:"https://www.lsac.org/index%2ephp/blog/khan-academy-lsat-test-prep-resources-coming-lsacs-lawhub-june-2024", official:true},
+  {name:"Manhattan Prep LSAT blog", who:"Third-party", cost:"Free articles; paid courses", use:"Strategy articles. I could not verify a current free trial class.", bridge:"Optional reading.", url:"https://www.manhattanprep.com/lsat/blog/tag/lsat-class", official:false},
+  {name:"LSAT Nexus", who:"Unverified", cost:"Unknown", use:"I could not find a provider by this name. Send me the link and I’ll add it.", bridge:"Not used until verified.", url:"", official:false}
+];
+const CAL_IDS = new Set([].concat(typeof LR_CAL!=="undefined"?LR_CAL.map(x=>x.id):[], typeof RC_CAL!=="undefined"?RC_CAL.flatMap(x=>x.qs.map(q=>q.id)):[]));
+const calPool = () => LR_ITEMS.filter(i=>CAL_IDS.has(i.qid));
+const offS = () => (S.official = S.official||{});
+function bankStats(){ const wc = t => String(t||"").split(/\s+/).filter(Boolean).length; const lr = LR_ITEMS.map(it=>Q(it.qid)); const avg = a => a.length ? Math.round(a.reduce((x,y)=>x+y,0)/a.length) : 0;
+  const stim = lr.map(q=>wc(q.sents.map(s=>s.t).join(" "))); const ch = lr.flatMap(q=>q.choices.map(c=>wc(c.t))); const sets = {}; RC_ITEMS.forEach(it=>{ sets[it.set] = it.paras; });
+  const rcw = Object.values(sets).map(p=>wc(p.join(" "))); const off = OFF_LR; return {lrStim:avg(stim), lrStimMin:Math.min(...stim), lrStimMax:Math.max(...stim), lrCh:avg(ch), rc:avg(rcw), offStim:avg(off.map(o=>o.stim)), offCh:avg(off.map(o=>o.ch)), nLR:lr.length, nRC:Object.keys(sets).length}; }
+function offRow(kind, o){ const key = kind+o.n; const r = offS()[key]; const sel = U.offSel && U.offSel[key];
+  return '<div class="gword"><div class="row" style="justify-content:space-between;flex-wrap:wrap;gap:6px"><strong>'+(kind==="lr"?"LR":"RC")+' '+o.n+' · '+esc(o.type)+'</strong><span class="muted" style="font-size:.85rem">'+esc(o.diff)+(o.set?' · '+esc(o.set):'')+'</span></div>'+
+    (r ? '<p>'+(r.ok?'✓ Correct':'✗ Not correct')+' · you chose '+r.pick+' ('+esc(r.conf)+'), '+new Date(r.at).toLocaleDateString()+'. <button class="btn ghost" style="font-size:.85rem" data-act="off-redo" data-k="'+key+'">Redo</button></p>'+(kind==="lr"&&o.how?'<p class="muted" style="font-size:.9rem"><strong>How it works:</strong> '+esc(o.how)+'</p>':"")+(r.ok?"":errOffHTML(key)) :
+     '<div class="row" style="gap:6px;flex-wrap:wrap;align-items:center"><span class="muted" style="font-size:.85rem">Your answer:</span>'+["A","B","C","D","E"].map(l=>'<button class="chip" data-act="off-pick" data-k="'+key+'" data-v="'+l+'" aria-pressed="'+((sel||{}).pick===l)+'">'+l+'</button>').join("")+'<select class="field" data-act="off-conf" data-k="'+key+'" style="max-width:220px"><option value="">How sure?</option>'+[["confident","Correct reasoning, confident"],["uncertain","Reasoned, but uncertain"],["guess","Elimination or guess"]].map(([v,l])=>'<option value="'+v+'"'+((sel||{}).conf===v?' selected':'')+'>'+l+'</option>').join("")+'</select><button class="btn primary" data-act="off-check" data-k="'+key+'">Check</button></div>')+'</div>'; }
+function errOffHTML(key){ const r = offS()[key]; return '<div class="chips">'+Object.entries(ERR_TYPES).map(([k,l])=>'<button class="chip" data-act="off-err" data-k="'+key+'" data-v="'+k+'" aria-pressed="'+(r.etype===k)+'">'+esc(l)+'</button>').join("")+'</div>'; }
+function vOff(){ const tab = U.offTab||"lib"; const st = bankStats(); const O = offS();
+  const lrDone = OFF_LR.filter(o=>O["lr"+o.n]), rcDone = OFF_RC.filter(o=>O["rc"+o.n]);
+  let h = '<div class="stack"><section class="panel stack" style="gap:8px"><span class="mono">Official materials</span><h1>The real thing, and how Bridge matches it</h1><p class="lead">Bridge’s questions are original practice. Official LSAC questions are the only way to calibrate. This section catalogs legitimate resources, maps how official questions are built, and logs your answers on LSAC’s free samples.</p><div class="chips">'+[["lib","Resource library"],["samples","Official samples ("+(lrDone.length+rcDone.length)+"/24)"],["blue","How official questions are built"]].map(([k,l])=>'<button class="chip" data-act="off-tab" data-v="'+k+'" aria-pressed="'+(tab===k)+'">'+esc(l)+'</button>').join("")+'</div></section>';
+  if(tab==="lib") return h + '<section class="panel stack"><h2>Resource library</h2><p class="muted" style="font-size:.88rem">Checked October 24, 2026. Prices change; confirm on each site.</p>'+RESOURCES.map(r=>'<div class="gline"><span class="gt '+(r.official?"gt-con":r.who==="Unverified"?"gt-other":"gt-bg")+'">'+(r.official?"OFFICIAL":r.who==="Unverified"?"UNVERIFIED":"THIRD-PARTY")+'</span><span><strong>'+(r.url?'<a href="'+esc(r.url)+'" target="_blank" rel="noopener">'+esc(r.name)+'</a>':esc(r.name))+'</strong> · '+esc(r.cost)+'<br>'+esc(r.use)+'<br><span class="muted" style="font-size:.88rem">In Bridge: '+esc(r.bridge)+'</span></span></div>').join("")+
+    '<div class="gbox"><h4>How to use them with Bridge</h4><ol class="gsteps"><li>Now: do LSAC’s 24 free sample questions here, under “Official samples.”</li><li>This month: take one free LawHub PrepTest timed as a baseline and log the score in My year.</li><li>Weekly (Saturdays): an official timed section on LawHub once foundations hold; log it.</li><li>For every official miss: read an explanation (7Sage or LSAT Hacks), then tag the mistake type in Bridge.</li><li>Only official PrepTest scores count toward your readiness verdict. Bridge percentages are never converted to LSAT scores.</li></ol></div></section></div>';
+  if(tab==="samples"){ const pc = (xs,k) => { const d = xs.filter(o=>O[k+o.n]); return d.length ? d.filter(o=>O[k+o.n].ok).length+'/'+d.length : '—'; };
+    return h + '<section class="panel stack"><h2>LSAC official samples</h2><p>Open the question on LSAC’s page, answer it there, then record your letter and confidence here. Bridge checks it against the official key and logs it separately from Bridge practice. LR: <strong>'+pc(OFF_LR,"lr")+'</strong> · RC: <strong>'+pc(OFF_RC,"rc")+'</strong></p><div class="row" style="gap:8px;flex-wrap:wrap"><a class="btn" href="'+LSAC_LR_URL+'" target="_blank" rel="noopener">Open LSAC LR samples</a><a class="btn" href="'+LSAC_RC_URL+'" target="_blank" rel="noopener">Open LSAC RC samples</a></div></section>'+
+      '<section class="panel stack"><h3>Logical Reasoning (10)</h3>'+OFF_LR.map(o=>offRow("lr",o)).join("")+'</section><section class="panel stack"><h3>Reading Comprehension (14)</h3>'+OFF_RC.map(o=>offRow("rc",o)).join("")+'</section></div>'; }
+  return h + '<section class="panel stack"><h2>How official questions are built</h2><p class="explain">Measured from LSAC’s public samples. Bridge’s question writers use these numbers as targets.</p><div class="tblwrap"><table class="cal"><tr><th>#</th><th>Type</th><th>Difficulty</th><th class="n">Stimulus words</th><th class="n">Choice words</th></tr>'+OFF_LR.map(o=>'<tr><td>LR '+o.n+'</td><td>'+esc(o.type)+'</td><td>'+esc(o.diff)+'</td><td class="n">~'+o.stim+'</td><td class="n">~'+o.ch+'</td></tr>').join("")+'</table></div>'+
+    '<h3>Calibration: official vs. Bridge</h3><div class="tblwrap"><table class="cal"><tr><th></th><th class="n">Official samples</th><th class="n">Bridge bank</th></tr><tr><td>LR stimulus, average words</td><td class="n">~'+st.offStim+' (35–140)</td><td class="n">'+st.lrStim+' ('+st.lrStimMin+'–'+st.lrStimMax+')</td></tr><tr><td>LR answer choice, average words</td><td class="n">~'+st.offCh+'</td><td class="n">'+st.lrCh+'</td></tr><tr><td>RC passage words</td><td class="n">500–550 (pairs ~260 + ~400)</td><td class="n">'+st.rc+' average</td></tr><tr><td>Questions</td><td class="n">10 LR · 14 RC</td><td class="n">'+st.nLR+' LR · '+st.nRC+' RC sets</td></tr></table></div>'+
+    (calPool().length?'<div class="gbox"><h4>Official-calibrated practice</h4><p>'+calPool().length+' Bridge questions written to the official targets above (lengths, stems, and the trap types LSAC’s explanations name), including Point at issue and Parallel flaw. Still original practice, not official questions.</p><div class="row" style="gap:8px;flex-wrap:wrap"><button class="btn primary" data-act="off-cal" data-v="un">Untimed set (10)</button><button class="btn" data-act="off-cal" data-v="t">Timed set (10 in 14 min)</button></div></div>':'')+'<h3>Rules the official explanations repeat</h3><ul class="prose" style="padding-left:20px">'+OFF_RULES.map(r=>'<li>'+esc(r)+'</li>').join("")+'</ul>'+
+    '<h3>Patterns worth copying</h3><ul class="prose" style="padding-left:20px"><li>The most popular wrong answers were an irrelevant detail (necessary assumption) and a partial explanation (paradox): attractive, not ambiguous.</li><li>Difficult and very difficult items had short stimuli (35–75 words). Difficulty comes from logic, not length.</li><li>Parallel flaw had the longest choices (~27 words): abstract the pattern before reading them.</li><li>RC tests what the author <em>would agree with</em>, phrase meaning in context, and analogies, beyond main point and detail.</li></ul></section></div>'; }
+const _mergeStateO = mergeState; mergeState = function(o){ _mergeStateO(o); if(o.official) for(const k in o.official){ if(!offS()[k] || o.official[k].at>offS()[k].at) offS()[k] = o.official[k]; } };
+function offCheck(key){ const sel = (U.offSel||{})[key]||{}; if(!sel.pick){ toast("Pick a letter first."); return; } if(!sel.conf){ toast("Say how sure you were first."); return; }
+  const kind = key.slice(0,2), n = +key.slice(2); const o = (kind==="lr"?OFF_LR:OFF_RC).find(x=>x.n===n); const ok = sel.pick===o.key;
+  offS()[key] = {at:Date.now(), pick:sel.pick, ok, conf:sel.conf}; lrlogS().push({at:Date.now(), day:today(), uid:"off:"+key, k:kind, type:"Official sample · "+o.type, level:/Very|Difficult/.test(o.diff)?4:/Medium/.test(o.diff)?3:2, ok, timed:false, official:true});
+  const D = dayRec(); D.q++; if(ok) D.ok++; D[kind].n++; if(ok) D[kind].ok++; touchDay(); save(); render(); }
+(function(){ const st = document.createElement("style"); st.textContent = ".gline a{color:var(--accent)}"; document.head.appendChild(st); })();
+document.addEventListener("change", e=>{ const a = e.target.dataset && e.target.dataset.act; if(a==="off-conf"){ U.offSel = U.offSel||{}; (U.offSel[e.target.dataset.k] = U.offSel[e.target.dataset.k]||{}).conf = e.target.value; } });
 
 /* plan goal defaults (target 170, stretch 175, minimum 165) */
 if(S.plan){ if(S.plan.start && !S.plan.target) S.plan.target = 170; if(!S.plan.stretch) S.plan.stretch = 175; if(!S.plan.minimum) S.plan.minimum = 165; }
